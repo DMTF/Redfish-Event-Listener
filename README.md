@@ -23,11 +23,16 @@ The target Redfish service(s) must also be configured to send Redfish events.
 ## Configuration
 
 The following details will need to be entered in the config.ini file:
+
 1. SSL Certificate Details if required; the tool comes with a default self signed certificate
-2. Subscription details if you require this tool to perform subscription, which consist of the following:
+2. Review and update the [SystemInformation] as required:
+    * ListenerIP: the interface to listen on for event messages (typically 0.0.0.0)
+    * ListenerPort: the port number to listen on for event messages
+    * UseSSL: 'on' to use HTTPS (SSL), 'off' to use HTTP for incoming event messages
+3. Subscription details if you require this tool to perform subscription, which consist of the following:
     * Subscription details of Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI in config.ini file
     * Server information in comma separated format for IP, Username and password. Keep all these field blank if subscription is taken care manually.
-3. If the service is subscribed manually, the context needs to be set same as mentioned in the config file (Public by default)
+4. If the service is subscribed manually, the context needs to be set same as mentioned in the config file (Public by default)
 
 ## Running the Tool
 
@@ -35,7 +40,7 @@ Execute using `python RedfishEventListener_v1.py`
 
 Received event details will be captured on the console and recorded into a file named Events_<Service IP>.txt in the working directory.  Individual files will be generated for each subscribed service.
 
-The tool can be stopped by clicking on the 'X' icon.
+The tool can be stopped by issuing a keyboard interrupt (CTRL-C).
 
 ## Limitations
 
