@@ -14,12 +14,15 @@ import threading
 import requests
 from http_parser.http import HttpStream
 from http_parser.reader import SocketReader
+import signal
 import ssl
 
 ### Initializing the global parameter
 config = configparser.ConfigParser()
 config.read('config.ini')
 listenerip = config.get('SystemInformation', 'ListenerIP')
+listenerport = config.get('SystemInformation', 'ListenerPort')
+useSSL = config.getboolean('SystemInformation', 'UseSSL')
 certfile = config.get('CertificateDetails', 'certfile')
 keyfile = config.get('CertificateDetails', 'keyfile')
 
@@ -35,15 +38,20 @@ SubscriptionURI = config.get('SubsciptionDetails', 'SubscriptionURI')
 ServerIPs = config.get('ServerInformation', 'ServerIPs')
 UserNames = config.get('ServerInformation', 'UserNames')
 Passwords = config.get('ServerInformation', 'Passwords')
-certcheck = config.get('ServerInformation', 'certcheck')
+certcheck = config.getboolean('ServerInformation', 'certcheck')
 
-context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-context.load_cert_chain(certfile=certfile, keyfile=keyfile)
+if useSSL:
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(certfile=certfile, keyfile=keyfile)
 
-### Bind socket connection and listen on port number 443
+# exit gracefully on CTRL-C
+signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
+
+### Bind socket connection and listen on the specified port
 bindsocket = socket.socket()
-bindsocket.bind((listenerip, 443))
+bindsocket.bind((listenerip, int(listenerport)))
 bindsocket.listen(5)
+print('Listening on {}:{} via {}'.format(listenerip, listenerport, 'HTTPS' if useSSL else 'HTTP'))
 event_count = {}
 
 
@@ -52,7 +60,8 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
     print("URI is: ", ConfigURI + URILink)
     try:
         startTime2 = DT.now()
-        if certcheck == 'On':
+        response = statusCode = expCode = None
+        if certcheck:
             if Method == 'GET':
                 response = requests.get(ConfigURI + URILink, auth=(LocalUser, LocalPassword), timeout=30)
             elif Method == 'PATCH':
@@ -61,7 +70,7 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
             elif Method == 'POST':
                 response = requests.post(ConfigURI + URILink, data=payload, auth=(LocalUser, LocalPassword), timeout=30)
         else:
-            if header == None:
+            if header is None:
                 if Method == 'GET':
                     response = requests.get(ConfigURI + URILink, verify=False, auth=(LocalUser, LocalPassword),
                                             timeout=30)
@@ -97,7 +106,8 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
         endTime2 = DT.now()
         execTime2 = endTime2 - startTime2
 
-        statusCode = response.status_code
+        if response is not None:
+            statusCode = response.status_code
         if Method == 'GET':
             expCode = 200
         elif Method == 'PATCH':
@@ -107,7 +117,7 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
         elif Method == 'DELETE':
             expCode = [200, 201, 204]
 
-        print(Method, statusCode, expCode)
+        print('Method = {}, status = {}, expected status = {}'.format(Method, statusCode, expCode))
 
         try:
             decoded = response.json()
@@ -186,7 +196,10 @@ def PerformSubscription():
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
 def read_output_data(newsocketconn, fromaddr):
-    connstreamout = context.wrap_socket(newsocketconn, server_side=True)
+    if useSSL:
+        connstreamout = context.wrap_socket(newsocketconn, server_side=True)
+    else:
+        connstreamout = newsocketconn
     ### Output File Name
     outputfile = "Events_" + str(fromaddr[0]) + ".txt"
     global event_count
@@ -235,14 +248,11 @@ def read_output_data(newsocketconn, fromaddr):
             print(outdata)
 
         ### Check the context and send the status OK if context matches
-        if outdata.get('Context', None) == ContextDetail:
-            StatusCode = """HTTP/1.1 200 OK\r\n"""
-            connstreamout.write(bytes(StatusCode, 'UTF-8'))
-
-        else:
-            StatusCode = """HTTP/1.1 200 OK\r\n"""
-            connstreamout.write(bytes(StatusCode, 'UTF-8'))
-            print("Context does not match with the server.")
+        if outdata.get('Context', None) != ContextDetail:
+            print("Context ({}) does not match with the server ({})."
+                  .format(outdata.get('Context', None), ContextDetail))
+        StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
+        connstreamout.send(bytes(StatusCode, 'UTF-8'))
 
         try:
             if event_count.get(str(fromaddr[0])):
