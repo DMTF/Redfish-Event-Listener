@@ -1,10 +1,10 @@
 # Redfish Event Listener
 
-Copyright 2017 Distributed Management Task Force, Inc. All rights reserved.
+Copyright 2017-2018 Distributed Management Task Force, Inc. All rights reserved.
 
 ## About
 
-The Redfish Event Listener is a lightweight HTTPS server that can be deployed to read and record events from Redfish services.  It can also subscribe to multiple services.
+The Redfish Event Listener is a lightweight HTTP(S) server that can be deployed to read and record events from Redfish services.  It can also subscribe to multiple services.
 
 ## Pre Requisites:
 
