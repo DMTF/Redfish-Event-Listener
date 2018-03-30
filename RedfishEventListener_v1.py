@@ -16,6 +16,9 @@ from http_parser.reader import SocketReader
 import signal
 import ssl
 
+### Print the tool banner
+print('Redfish Event Listener v1.0.1')
+
 ### Initializing the global parameter
 config = configparser.ConfigParser()
 config.read('config.ini')
