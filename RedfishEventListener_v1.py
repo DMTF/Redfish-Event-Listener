@@ -15,6 +15,8 @@ from http_parser.http import HttpStream
 from http_parser.reader import SocketReader
 import signal
 import ssl
+import os
+from datetime import datetime
 
 ### Print the tool banner
 print('Redfish Event Listener v1.0.1')
@@ -42,6 +44,8 @@ UserNames = config.get('ServerInformation', 'UserNames')
 Passwords = config.get('ServerInformation', 'Passwords')
 certcheck = config.getboolean('ServerInformation', 'certcheck')
 
+verbose = False
+
 if useSSL:
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -55,6 +59,7 @@ bindsocket.bind((listenerip, int(listenerport)))
 bindsocket.listen(5)
 print('Listening on {}:{} via {}'.format(listenerip, listenerport, 'HTTPS' if useSSL else 'HTTP'))
 event_count = {}
+data_buffer = []
 
 
 ### Function to perform GET/PATCH/POST/DELETE operation for REDFISH URI
@@ -165,7 +170,7 @@ def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
 
 ### Create Subsciption on the servers provided by users if any
 def PerformSubscription():
-    global ServerIPs, UserNames, Passwords, Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI
+    global ServerIPs, UserNames, Passwords, Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI, verbose
     ServerIPList = ServerIPs.split(",")
     UserNameList = UserNames.split(",")
     PasswordList = Passwords.split(",")
@@ -173,7 +178,7 @@ def PerformSubscription():
     AttributeValueList = [Destination, EventTypes, ContextDetail, Protocol]
 
     if (len(ServerIPList) == len(UserNameList) == len(PasswordList)) and (len(ServerIPList) > 0) and (
-    not (ServerIPs.strip() == "")):
+            not (ServerIPs.strip() == "")):
         print("Count of Server is ", len(ServerIPList))
         payload = GetPostPayload(AttributeNameList, AttributeValueList, "string")
         for i in range(0, len(ServerIPList)):
@@ -195,16 +200,20 @@ def PerformSubscription():
 
     print("\nContinuing with Listener.")
 
+    if len(sys.argv) > 1 and sys.argv[1] in ("-v", "-V"):
+        verbose = True
+
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
-def read_output_data(newsocketconn, fromaddr):
+def process_data(newsocketconn, fromaddr):
     if useSSL:
         connstreamout = context.wrap_socket(newsocketconn, server_side=True)
     else:
         connstreamout = newsocketconn
     ### Output File Name
     outputfile = "Events_" + str(fromaddr[0]) + ".txt"
-    global event_count
+    logfile = "TimeStamp.log"
+    global event_count, data_buffer
     outdata = headers = HostDetails = ""
     try:
         try:
@@ -213,63 +222,96 @@ def read_output_data(newsocketconn, fromaddr):
             p = HttpStream(r)
             headers = p.headers()
             print("headers: ", headers)
-            bodydata = p.body_file().read()
-            bodydata = bodydata.decode("utf-8")
-            print("bodydata: ", bodydata)
-            for eachHeader in headers.items():
-                if eachHeader[0] == 'Host' or eachHeader[0] == 'host':
-                    HostDetails = eachHeader[1]
 
-            ### Read the json response and print the output
-            print("\n")
-            print("Server IP Address is ", fromaddr[0])
-            print("Server PORT number is ", fromaddr[1])
-            print("Listener IP is ", HostDetails)
-            outdata = json.loads(bodydata)
-            event_array = outdata['Events']
-            for event in event_array:
-                print("EventType is ", event['EventType'])
-                print("MessageId is ", event['MessageId'])
-                if 'EventId' in event:
-                    print("EventId is ", event['EventId'])
-                if 'EventTimestamp' in event:
-                    print("EventTimestamp is ", event['EventTimestamp'])
-                if 'Severity' in event:
-                    print("Severity is ", event['Severity'])
-                if 'Message' in event:
-                    print("Message is ", event['Message'])
-                if 'MessageArgs' in event:
-                    print("MessageArgs is ", event['MessageArgs'])
-                if 'Context' in outdata:
-                    print("Context is ", outdata['Context'])
+            if p.method() == 'POST':
+                bodydata = p.body_file().read()
+                bodydata = bodydata.decode("utf-8")
                 print("\n")
+                print("bodydata: ", bodydata)
+                data_buffer.append(bodydata)
+                for eachHeader in headers.items():
+                    if eachHeader[0] == 'Host' or eachHeader[0] == 'host':
+                        HostDetails = eachHeader[1]
+
+                ### Read the json response and print the output
+                print("\n")
+                print("Server IP Address is ", fromaddr[0])
+                print("Server PORT number is ", fromaddr[1])
+                print("Listener IP is ", HostDetails)
+                print("\n")
+                outdata = json.loads(bodydata)
+                if 'Events' in outdata and verbose:
+                    event_array = outdata['Events']
+                    for event in event_array:
+                        print("EventType is ", event['EventType'])
+                        print("MessageId is ", event['MessageId'])
+                        if 'EventId' in event:
+                            print("EventId is ", event['EventId'])
+                        if 'EventTimestamp' in event:
+                            print("EventTimestamp is ", event['EventTimestamp'])
+                        if 'Severity' in event:
+                            print("Severity is ", event['Severity'])
+                        if 'Message' in event:
+                            print("Message is ", event['Message'])
+                        if 'MessageArgs' in event:
+                            print("MessageArgs is ", event['MessageArgs'])
+                        if 'Context' in outdata:
+                            print("Context is ", outdata['Context'])
+                        print("\n")
+                if 'MetricValues' in outdata and verbose:
+                    metric_array = outdata['MetricValues']
+                    for metric in metric_array:
+                        print("Member ID is: ", metric.get('MetricId'))
+                        print("Metric Value is: ", metric.get('MetricValue'))
+                        print("TimeStamp is: ", metric.get('Timestamp'))
+                        if 'MetricProperty' in metric:
+                            print("Metric Property is: ", metric['MetricProperty'])
+                        print("\n")
+
+                ### Check the context and send the status OK if context matches
+                if outdata.get('Context', None) != ContextDetail:
+                    print("Context ({}) does not match with the server ({})."
+                          .format(outdata.get('Context', None), ContextDetail))
+                StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
+                connstreamout.send(bytes(StatusCode, 'UTF-8'))
+                with open(logfile, 'a') as f:
+                    if 'EventTimestamp' in outdata:
+                        receTime = datetime.now()
+                        sentTime = datetime.strptime(outdata['EventTimestamp'], "%Y-%m-%d %H:%M:%S.%f")
+                        f.write("%s    %s    %sms\n" % (
+                            sentTime.strftime("%Y-%m-%d %H:%M:%S.%f"), receTime, (receTime - sentTime).microseconds / 1000))
+                    else:
+                        f.write('No available timestamp.')
+
+                try:
+                    if event_count.get(str(fromaddr[0])):
+                        event_count[str(fromaddr[0])] = event_count[str(fromaddr[0])] + 1
+                    else:
+                        event_count[str(fromaddr[0])] = 1
+
+                    print("Event Counter for Host %s = %s" % (str(fromaddr[0]), event_count[fromaddr[0]]))
+                    print("\n")
+                    fd = open(outputfile, "a")
+                    fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
+                        time.ctime(), event_count[str(fromaddr[0])], str(fromaddr), json.dumps(outdata)))
+                    fd.close()
+                except Exception as err:
+                    print(traceback.print_exc())
+
+            if p.method() == 'GET':
+                # for x in data_buffer:
+                #     print(x)
+                res = "HTTP/1.1 200 OK\n" \
+                      "Content-Type: application/json\n" \
+                      "\n" + json.dumps(data_buffer)
+                connstreamout.send(res.encode())
+                data_buffer.clear()
+
 
         except Exception as err:
             outdata = connstreamout.read()
             print("Data needs to read in normal Text format.")
             print(outdata)
-
-        ### Check the context and send the status OK if context matches
-        if outdata.get('Context', None) != ContextDetail:
-            print("Context ({}) does not match with the server ({})."
-                  .format(outdata.get('Context', None), ContextDetail))
-        StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
-        connstreamout.send(bytes(StatusCode, 'UTF-8'))
-
-        try:
-            if event_count.get(str(fromaddr[0])):
-                event_count[str(fromaddr[0])] = event_count[str(fromaddr[0])] + 1
-            else:
-                event_count[str(fromaddr[0])] = 1
-
-            print("Event Counter for Host %s is %s" % (str(fromaddr[0]), event_count[fromaddr[0]]))
-            print("\n")
-            fd = open(outputfile, "a")
-            fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
-                time.ctime(), event_count[str(fromaddr[0])], str(fromaddr), outdata))
-            fd.close()
-        except Exception as err:
-            print(traceback.print_exc())
 
     finally:
         connstreamout.shutdown(socket.SHUT_RDWR)
@@ -289,7 +331,7 @@ while True:
         newsocketconn, fromaddr = bindsocket.accept()
         try:
             ### Multiple Threads to handle different request from different servers
-            threading.Thread(target=read_output_data, args=(newsocketconn, fromaddr)).start()
+            threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
         except Exception as err:
             print(traceback.print_exc())
     except Exception as err:
