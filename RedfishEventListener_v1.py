@@ -149,6 +149,7 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
     except Exception as err:
         print("Exception occurred in while performing subscription.")
         print(traceback.print_exc())
+        return None, False, "", [], ""
 
 
 def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
@@ -171,14 +172,13 @@ def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
 ### Create Subsciption on the servers provided by users if any
 def PerformSubscription():
     global ServerIPs, UserNames, Passwords, Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI, verbose
-    ServerIPList = ServerIPs.split(",")
+    ServerIPList = [x for x in ServerIPs.split(",") if x.strip() != '']
     UserNameList = UserNames.split(",")
     PasswordList = Passwords.split(",")
     AttributeNameList = ['Destination', 'EventTypes', 'Context', 'Protocol']
     AttributeValueList = [Destination, EventTypes, ContextDetail, Protocol]
 
-    if (len(ServerIPList) == len(UserNameList) == len(PasswordList)) and (len(ServerIPList) > 0) and (
-            not (ServerIPs.strip() == "")):
+    if (len(ServerIPList) == len(UserNameList) == len(PasswordList)) and (len(ServerIPList) > 0):
         print("Count of Server is ", len(ServerIPList))
         payload = GetPostPayload(AttributeNameList, AttributeValueList, "string")
         for i in range(0, len(ServerIPList)):
@@ -199,9 +199,6 @@ def PerformSubscription():
         print("\nNo subscriptions are specified. Continuing with Listener.")
 
     print("\nContinuing with Listener.")
-
-    if len(sys.argv) > 1 and sys.argv[1] in ("-v", "-V"):
-        verbose = True
 
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
@@ -260,6 +257,7 @@ def process_data(newsocketconn, fromaddr):
                         print("\n")
                 if 'MetricValues' in outdata and verbose:
                     metric_array = outdata['MetricValues']
+                    print("Metric Report Name is: ", outdata.get('Name'))
                     for metric in metric_array:
                         print("Member ID is: ", metric.get('MetricId'))
                         print("Metric Value is: ", metric.get('MetricValue'))
@@ -319,6 +317,9 @@ def process_data(newsocketconn, fromaddr):
 
 
 ### Script starts here
+if len(sys.argv) > 1 and sys.argv[1] in ("-v", "-V"):
+    verbose = True
+
 ### Perform the Subscription if provided
 PerformSubscription()
 
