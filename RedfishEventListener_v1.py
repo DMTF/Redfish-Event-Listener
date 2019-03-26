@@ -1,5 +1,5 @@
 # Copyright Notice:
-# Copyright 2017 Distributed Management Task Force, Inc. All rights reserved.
+# Copyright 2017-2019 DMTF. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/master/LICENSE.md
 
 import socket
@@ -19,7 +19,7 @@ import os
 from datetime import datetime
 
 ### Print the tool banner
-print('Redfish Event Listener v1.0.1')
+print('Redfish Event Listener v1.0.2')
 
 ### Initializing the global parameter
 config = configparser.ConfigParser()
