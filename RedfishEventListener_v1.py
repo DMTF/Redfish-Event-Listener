@@ -8,6 +8,7 @@ import traceback
 import json
 from datetime import datetime as DT
 import configparser
+import ast
 import sys
 import threading
 import requests
@@ -31,17 +32,15 @@ certfile = config.get('CertificateDetails', 'certfile')
 keyfile = config.get('CertificateDetails', 'keyfile')
 
 Destination = config.get('SubsciptionDetails', 'Destination')
-EventType = config.get('SubsciptionDetails', 'EventTypes')
-EventTypeString = [EventType]
-EventTypes = json.dumps(EventTypeString)
-print("EventTypes: ", EventTypes)
+EventTypes = ast.literal_eval(config.get('SubsciptionDetails', 'EventTypes'))
 ContextDetail = config.get('SubsciptionDetails', 'Context')
 Protocol = config.get('SubsciptionDetails', 'Protocol')
 SubscriptionURI = config.get('SubsciptionDetails', 'SubscriptionURI')
 
-ServerIPs = config.get('ServerInformation', 'ServerIPs')
-UserNames = config.get('ServerInformation', 'UserNames')
-Passwords = config.get('ServerInformation', 'Passwords')
+ServerIPs = ast.literal_eval(config.get('ServerInformation', 'ServerIPs'))
+UserNames = ast.literal_eval(config.get('ServerInformation', 'UserNames'))
+Passwords = ast.literal_eval(config.get('ServerInformation', 'Passwords'))
+
 certcheck = config.getboolean('ServerInformation', 'certcheck')
 
 verbose = False
@@ -159,7 +158,7 @@ def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
             if i == len(AttributeNameList) - 1:
                 payload = payload + "\"" + str(AttributeNameList[i]) + "\":\"" + str(AttributeValueList[i]) + "\""
             elif AttributeNameList[i] == "EventTypes":
-                payload = payload + "\"" + str(AttributeNameList[i]) + "\":" + str(AttributeValueList[i]) + ","
+                payload = payload + "\"" + str(AttributeNameList[i]) + "\":" + json.dumps(AttributeValueList[i]) + ","
             else:
                 payload = payload + "\"" + str(AttributeNameList[i]) + "\":\"" + str(AttributeValueList[i]) + "\","
 
@@ -172,11 +171,13 @@ def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
 ### Create Subsciption on the servers provided by users if any
 def PerformSubscription():
     global ServerIPs, UserNames, Passwords, Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI, verbose
-    ServerIPList = [x for x in ServerIPs.split(",") if x.strip() != '']
-    UserNameList = UserNames.split(",")
-    PasswordList = Passwords.split(",")
+    ServerIPList = [x.strip() for x in ServerIPs if x.strip() != '']
+    UserNameList = [x.strip() for x in UserNames if x.strip() != '']
+    PasswordList = [x.strip() for x in Passwords if x.strip() != '']
+    EventTypesList = [x.strip() for x in EventTypes if x.strip() != '']
+
     AttributeNameList = ['Destination', 'EventTypes', 'Context', 'Protocol']
-    AttributeValueList = [Destination, EventTypes, ContextDetail, Protocol]
+    AttributeValueList = [Destination, EventTypesList, ContextDetail, Protocol]
 
     if (len(ServerIPList) == len(UserNameList) == len(PasswordList)) and (len(ServerIPList) > 0):
         print("Count of Server is ", len(ServerIPList))
