@@ -3,69 +3,50 @@
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/master/LICENSE.md
 
 import socket
-import time
 import traceback
 import json
-from datetime import datetime as DT
-import configparser
-import ast
+import ssl
+from datetime import datetime
 import sys
-import threading
+import re
+
 import requests
+import threading
 from http_parser.http import HttpStream
 from http_parser.reader import SocketReader
-import signal
-import ssl
-import os
-from datetime import datetime
 
-### Print the tool banner
-print('Redfish Event Listener v1.0.2')
+import logging
+my_logger = logging.getLogger()
+my_logger.setLevel(logging.DEBUG)
+standard_out = logging.StreamHandler(sys.stdout)
+standard_out.setLevel(logging.INFO)
+my_logger.addHandler(standard_out)
 
-### Initializing the global parameter
-config = configparser.ConfigParser()
-config.read('config.ini')
-listenerip = config.get('SystemInformation', 'ListenerIP')
-listenerport = config.get('SystemInformation', 'ListenerPort')
-useSSL = config.getboolean('SystemInformation', 'UseSSL')
-certfile = config.get('CertificateDetails', 'certfile')
-keyfile = config.get('CertificateDetails', 'keyfile')
+tool_version = '1.0.3'
 
-Destination = config.get('SubsciptionDetails', 'Destination')
-EventTypes = ast.literal_eval(config.get('SubsciptionDetails', 'EventTypes'))
-ContextDetail = config.get('SubsciptionDetails', 'Context')
-Protocol = config.get('SubsciptionDetails', 'Protocol')
-SubscriptionURI = config.get('SubsciptionDetails', 'SubscriptionURI')
-
-ServerIPs = ast.literal_eval(config.get('ServerInformation', 'ServerIPs'))
-UserNames = ast.literal_eval(config.get('ServerInformation', 'UserNames'))
-Passwords = ast.literal_eval(config.get('ServerInformation', 'Passwords'))
-
-certcheck = config.getboolean('ServerInformation', 'certcheck')
-
-verbose = False
-
-if useSSL:
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(certfile=certfile, keyfile=keyfile)
-
-# exit gracefully on CTRL-C
-signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
-
-### Bind socket connection and listen on the specified port
-bindsocket = socket.socket()
-bindsocket.bind((listenerip, int(listenerport)))
-bindsocket.listen(5)
-print('Listening on {}:{} via {}'.format(listenerip, listenerport, 'HTTPS' if useSSL else 'HTTP'))
-event_count = {}
-data_buffer = []
-
+config = {
+    'listenerip': '0.0.0.0',
+    'listenerport': 443,
+    'usessl': True,
+    'certfile': 'cert.pem',
+    'keyfile': 'server.key',
+    'destination': 'https://contoso.com',
+    'eventtypes': ['Alert'],
+    'contextdetail': 'Public',
+    'protocol': 'Redfish',
+    'subscriptionURI': '/redfish/v1/EventService/Subscriptions',
+    'serverIPs': [],
+    'usernames': [],
+    'passwords': [],
+    'certcheck': True
+}
 
 ### Function to perform GET/PATCH/POST/DELETE operation for REDFISH URI
 def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None, LocalUser=None, LocalPassword=None):
     print("URI is: ", ConfigURI + URILink)
+    certcheck = config['certcheck']
     try:
-        startTime2 = DT.now()
+        startTime2 = datetime.now()
         response = statusCode = expCode = None
         if certcheck:
             if Method == 'GET':
@@ -109,7 +90,7 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
                     response = requests.delete(ConfigURI + URILink, data=payload, verify=False, headers=header,
                                                timeout=30)
 
-        endTime2 = DT.now()
+        endTime2 = datetime.now()
         execTime2 = endTime2 - startTime2
 
         if response is not None:
@@ -151,55 +132,18 @@ def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None,
         return None, False, "", [], ""
 
 
-def GetPostPayload(AttributeNameList, AttributeValueList, DataType="string"):
-    payload = ""
-    if DataType.lower() == "string":
-        for i in range(0, len(AttributeNameList)):
-            if i == len(AttributeNameList) - 1:
-                payload = payload + "\"" + str(AttributeNameList[i]) + "\":\"" + str(AttributeValueList[i]) + "\""
-            elif AttributeNameList[i] == "EventTypes":
-                payload = payload + "\"" + str(AttributeNameList[i]) + "\":" + json.dumps(AttributeValueList[i]) + ","
-            else:
-                payload = payload + "\"" + str(AttributeNameList[i]) + "\":\"" + str(AttributeValueList[i]) + "\","
-
-        payload = "{" + payload + "}"
-        print("Payload details are ", payload)
-
-    return payload
-
-
 ### Create Subsciption on the servers provided by users if any
-def PerformSubscription():
-    global ServerIPs, UserNames, Passwords, Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI, verbose
-    ServerIPList = [x.strip() for x in ServerIPs if x.strip() != '']
-    UserNameList = [x.strip() for x in UserNames if x.strip() != '']
-    PasswordList = [x.strip() for x in Passwords if x.strip() != '']
-    EventTypesList = [x.strip() for x in EventTypes if x.strip() != '']
-
-    AttributeNameList = ['Destination', 'EventTypes', 'Context', 'Protocol']
-    AttributeValueList = [Destination, EventTypesList, ContextDetail, Protocol]
-
-    if (len(ServerIPList) == len(UserNameList) == len(PasswordList)) and (len(ServerIPList) > 0):
-        print("Count of Server is ", len(ServerIPList))
-        payload = GetPostPayload(AttributeNameList, AttributeValueList, "string")
-        for i in range(0, len(ServerIPList)):
-            print("ServerIPList:::", ServerIPList[i])
-            print("UserNameList:::", UserNameList[i])
-            statusCode, Status, body, headers, ExecTime = callResourceURI(ServerIPList[i].strip(), SubscriptionURI,
-                                                                          Method='POST', payload=payload, header=None,
-                                                                          LocalUser=UserNameList[i].strip(),
-                                                                          LocalPassword=PasswordList[i].strip())
-
-            if Status:
-                print("Subcription is successful for %s" % ServerIPList[i])
-
-            else:
-                print("Subcription is not successful for %s or it is already present." % ServerIPList[i])
-
+def PerformSubscription(payload, dest, user, passwd, header=None):
+    print("ServerIP:::", dest)
+    print("UserName:::", user)
+    statusCode, Status, body, headers, ExecTime = callResourceURI(dest, SubscriptionURI,
+                                                                    Method='POST', payload=payload, header={},
+                                                                    LocalUser=user,
+                                                                    LocalPassword=passwd)
+    if Status:
+        print("Subcription is successful for %s" % dest)
     else:
-        print("\nNo subscriptions are specified. Continuing with Listener.")
-
-    print("\nContinuing with Listener.")
+        print("Subcription is not successful for %s or it is already present." % dest)
 
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
@@ -292,7 +236,7 @@ def process_data(newsocketconn, fromaddr):
                     print("\n")
                     fd = open(outputfile, "a")
                     fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
-                        time.ctime(), event_count[str(fromaddr[0])], str(fromaddr), json.dumps(outdata)))
+                        datetime.now(), event_count[str(fromaddr[0])], str(fromaddr), json.dumps(outdata)))
                     fd.close()
                 except Exception as err:
                     print(traceback.print_exc())
@@ -316,26 +260,99 @@ def process_data(newsocketconn, fromaddr):
         connstreamout.shutdown(socket.SHUT_RDWR)
         connstreamout.close()
 
+import argparse
 
-### Script starts here
-if len(sys.argv) > 1 and sys.argv[1] in ("-v", "-V"):
-    verbose = True
+if __name__ == '__main__':
+    """
+    Main program
+    """
 
-### Perform the Subscription if provided
-PerformSubscription()
+    ### Print the tool banner
+    logging.info('Redfish Event Listener v{}'.format(tool_version))
 
-### Accept the TCP connection using certificate validation using Socket wrapper
+    argget = argparse.ArgumentParser(description='Redfish Event Listener (v{}) is a tool that deploys an HTTP(S) server to read and record events from Redfish services.'.format(tool_version))
 
+    # config
+    argget.add_argument('-c', '--config', type=str, default='./config.ini', help='Specifies the location of our configuration file (default: ./config.ini)')
+    argget.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity of tool in stdout')
+    args = argget.parse_args()
 
-while True:
-    try:
-        ### Socket Binding
-        newsocketconn, fromaddr = bindsocket.accept()
+    ### Initializing the global parameter
+    from configparser import ConfigParser
+    parsed_config = ConfigParser()
+    parsed_config.read(args.config)
+
+    def parse_list(string: str):
+        if re.fullmatch(r'\[\]|\[.*\]', string):
+            string = string.strip('[]')
+        return [x.strip("'\"").strip() for x in string.split(',')]
+
+    config['listenerip'] = parsed_config.get('SystemInformation', 'ListenerIP')
+    config['listenerport'] = parsed_config.getint('SystemInformation', 'ListenerPort')
+    config['usessl'] = parsed_config.getboolean('SystemInformation', 'UseSSL')
+
+    config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
+    config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
+
+    config['destination'] = parsed_config.get('SubsciptionDetails', 'Destination')
+    config['contextdetail'] = parsed_config.get('SubsciptionDetails', 'Context')
+    config['protocol'] = parsed_config.get('SubsciptionDetails', 'Protocol')
+    config['subscriptionURI'] = parsed_config.get('SubsciptionDetails', 'SubscriptionURI')
+    config['eventtypes'] = parse_list(parsed_config.get('SubsciptionDetails', 'EventTypes'))
+
+    config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
+    config['usernames'] = parse_list(parsed_config.get('ServerInformation', 'UserNames'))
+    config['passwords'] = parse_list(parsed_config.get('ServerInformation', 'Passwords'))
+
+    config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
+    config['verbose'] = args.verbose
+
+    ### Perform the Subscription if provided
+    SubscriptionURI, Protocol, ContextDetail, EventTypes, Destination = config['subscriptionURI'], config['protocol'], config['contextdetail'], config['eventtypes'], config['destination']
+
+    payload = {
+        'Destination': config['destination'],
+        'EventTypes': config['eventtypes'],
+        'Context': config['contextdetail'],
+        'Protocol': config['protocol']
+    }
+
+    if not (len(config['serverIPs']) == len(config['usernames']) == len(config['passwords'])):
+        my_logger.info("Number of ServerIPs does not match UserNames and Passwords")
+    elif len(config['serverIPs']) == 0:
+        my_logger.info("No subscriptions are specified. Continuing with Listener.")
+    else:
+        for dest, user, passwd in zip(config['serverIPs'], config['usernames'], config['passwords']):
+            PerformSubscription(payload, dest, user, passwd)
+        my_logger.info("Continuing with Listener.")
+
+    ### Accept the TCP connection using certificate validation using Socket wrapper
+    useSSL = config['usessl']
+    if useSSL:
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
+
+    # exit gracefully on CTRL-C
+    import signal
+    signal.signal(signal.SIGINT, lambda: sys.exit(0))
+
+    ### Bind socket connection and listen on the specified port
+    bindsocket = socket.socket()
+    bindsocket.bind((config['listenerip'], config['listenerport']))
+    bindsocket.listen(5)
+    my_logger.info('Listening on {}:{} via {}'.format(config['listenerip'], config['listenerport'], 'HTTPS' if useSSL else 'HTTP'))
+    event_count = {}
+    data_buffer = []
+
+    while True:
         try:
-            ### Multiple Threads to handle different request from different servers
-            threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
+            ### Socket Binding
+            newsocketconn, fromaddr = bindsocket.accept()
+            try:
+                ### Multiple Threads to handle different request from different servers
+                threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
+            except Exception as err:
+                print(traceback.print_exc())
         except Exception as err:
+            print("Exception occurred in socket binding.")
             print(traceback.print_exc())
-    except Exception as err:
-        print("Exception occurred in socket binding.")
-        print(traceback.print_exc())
