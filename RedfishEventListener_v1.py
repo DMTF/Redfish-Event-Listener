@@ -4,6 +4,7 @@
 
 import socket
 import traceback
+import logging
 import json
 import ssl
 from datetime import datetime
@@ -15,7 +16,9 @@ import threading
 from http_parser.http import HttpStream
 from http_parser.reader import SocketReader
 
-import logging
+from redfish import redfish_client, AuthMethod
+import redfish_utilities.event_service as event_service
+
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
 standard_out = logging.StreamHandler(sys.stdout)
@@ -38,113 +41,10 @@ config = {
     'serverIPs': [],
     'usernames': [],
     'passwords': [],
-    'certcheck': True
+    "logintype": [],
+    'certcheck': True,
+    'verbose': False
 }
-
-### Function to perform GET/PATCH/POST/DELETE operation for REDFISH URI
-def callResourceURI(ConfigURI, URILink, Method='GET', payload=None, header=None, LocalUser=None, LocalPassword=None):
-    print("URI is: ", ConfigURI + URILink)
-    certcheck = config['certcheck']
-    try:
-        startTime2 = datetime.now()
-        response = statusCode = expCode = None
-        if certcheck:
-            if Method == 'GET':
-                response = requests.get(ConfigURI + URILink, auth=(LocalUser, LocalPassword), timeout=30)
-            elif Method == 'PATCH':
-                response = requests.patch(ConfigURI + URILink, data=payload, auth=(LocalUser, LocalPassword),
-                                          timeout=30)
-            elif Method == 'POST':
-                response = requests.post(ConfigURI + URILink, data=payload, auth=(LocalUser, LocalPassword), timeout=30)
-        else:
-            if header is None:
-                if Method == 'GET':
-                    response = requests.get(ConfigURI + URILink, verify=False, auth=(LocalUser, LocalPassword),
-                                            timeout=30)
-                elif Method == 'PATCH':
-                    header = {"content-type": "application/json"}
-                    response = requests.patch(ConfigURI + URILink, data=payload, verify=False,
-                                              auth=(LocalUser, LocalPassword), headers=header, timeout=30)
-                elif Method == 'POST':
-                    header = {"content-type": "application/json"}
-                    response = requests.post(ConfigURI + URILink, data=payload, verify=False,
-                                             auth=(LocalUser, LocalPassword), headers=header, timeout=30)
-                elif Method == 'CREATE':
-                    header = {"content-type": "application/json"}
-                    response = requests.post(ConfigURI + URILink, data=payload, verify=False, headers=header,
-                                             timeout=30)
-                elif Method == 'DELETE':
-                    header = {"content-type": "application/json"}
-                    response = requests.delete(ConfigURI + URILink, data=payload, verify=False,
-                                               auth=(LocalUser, LocalPassword), headers=header, timeout=30)
-            else:
-                if Method == 'GET':
-                    response = requests.get(ConfigURI + URILink, verify=False, headers=header, timeout=30)
-                elif Method == 'PATCH':
-                    response = requests.patch(ConfigURI + URILink, data=payload, verify=False, headers=header,
-                                              timeout=30)
-                elif Method == 'POST':
-                    response = requests.post(ConfigURI + URILink, data=payload, verify=False, headers=header,
-                                             timeout=30)
-                elif Method == 'DELETE':
-                    response = requests.delete(ConfigURI + URILink, data=payload, verify=False, headers=header,
-                                               timeout=30)
-
-        endTime2 = datetime.now()
-        execTime2 = endTime2 - startTime2
-
-        if response is not None:
-            statusCode = response.status_code
-        if Method == 'GET':
-            expCode = 200
-        elif Method == 'PATCH':
-            expCode = [200, 204]
-        elif Method == 'POST' or Method == 'CREATE':
-            expCode = [200, 201, 204]
-        elif Method == 'DELETE':
-            expCode = [200, 201, 204]
-
-        print('Method = {}, status = {}, expected status = {}'.format(Method, statusCode, expCode))
-
-        try:
-            decoded = response.json()
-        except:
-            decoded = ""
-        if (Method == 'GET' and statusCode == expCode):
-            return statusCode, True, decoded, response.headers, str(execTime2)
-        elif (Method == 'PATCH' and statusCode in expCode):
-            return statusCode, True, decoded, response.headers, str(execTime2)
-        elif (Method == 'DELETE' and statusCode in expCode):
-            return statusCode, True, decoded, response.headers, str(execTime2)
-        elif Method == 'POST' and (statusCode in expCode):
-            return statusCode, True, decoded, response.headers, str(execTime2)
-        elif (Method == 'CREATE') and (statusCode in expCode):
-            Token = response.headers['X-Auth-Token']
-            print("Token value: ", Token)
-            header = {"X-Auth-Token": Token}
-            return statusCode, True, "", response.headers, str(execTime2)
-        else:
-            return statusCode, False, "", response.headers, str(execTime2)
-
-    except Exception as err:
-        print("Exception occurred in while performing subscription.")
-        print(traceback.print_exc())
-        return None, False, "", [], ""
-
-
-### Create Subsciption on the servers provided by users if any
-def PerformSubscription(payload, dest, user, passwd, header=None):
-    print("ServerIP:::", dest)
-    print("UserName:::", user)
-    statusCode, Status, body, headers, ExecTime = callResourceURI(dest, SubscriptionURI,
-                                                                    Method='POST', payload=payload, header={},
-                                                                    LocalUser=user,
-                                                                    LocalPassword=passwd)
-    if Status:
-        print("Subcription is successful for %s" % dest)
-    else:
-        print("Subcription is not successful for %s or it is already present." % dest)
-
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
 def process_data(newsocketconn, fromaddr):
@@ -163,57 +63,57 @@ def process_data(newsocketconn, fromaddr):
             r = SocketReader(connstreamout)
             p = HttpStream(r)
             headers = p.headers()
-            print("headers: ", headers)
+            my_logger.info("headers: ", headers)
 
             if p.method() == 'POST':
                 bodydata = p.body_file().read()
                 bodydata = bodydata.decode("utf-8")
-                print("\n")
-                print("bodydata: ", bodydata)
+                my_logger.info("\n")
+                my_logger.info("bodydata: ", bodydata)
                 data_buffer.append(bodydata)
                 for eachHeader in headers.items():
                     if eachHeader[0] == 'Host' or eachHeader[0] == 'host':
                         HostDetails = eachHeader[1]
 
                 ### Read the json response and print the output
-                print("\n")
-                print("Server IP Address is ", fromaddr[0])
-                print("Server PORT number is ", fromaddr[1])
-                print("Listener IP is ", HostDetails)
-                print("\n")
+                my_logger.info("\n")
+                my_logger.info("Server IP Address is ", fromaddr[0])
+                my_logger.info("Server PORT number is ", fromaddr[1])
+                my_logger.info("Listener IP is ", HostDetails)
+                my_logger.info("\n")
                 outdata = json.loads(bodydata)
-                if 'Events' in outdata and verbose:
+                if 'Events' in outdata and config['verbose']:
                     event_array = outdata['Events']
                     for event in event_array:
-                        print("EventType is ", event['EventType'])
-                        print("MessageId is ", event['MessageId'])
+                        my_logger.info("EventType is ", event['EventType'])
+                        my_logger.info("MessageId is ", event['MessageId'])
                         if 'EventId' in event:
-                            print("EventId is ", event['EventId'])
+                            my_logger.info("EventId is ", event['EventId'])
                         if 'EventTimestamp' in event:
-                            print("EventTimestamp is ", event['EventTimestamp'])
+                            my_logger.info("EventTimestamp is ", event['EventTimestamp'])
                         if 'Severity' in event:
-                            print("Severity is ", event['Severity'])
+                            my_logger.info("Severity is ", event['Severity'])
                         if 'Message' in event:
-                            print("Message is ", event['Message'])
+                            my_logger.info("Message is ", event['Message'])
                         if 'MessageArgs' in event:
-                            print("MessageArgs is ", event['MessageArgs'])
+                            my_logger.info("MessageArgs is ", event['MessageArgs'])
                         if 'Context' in outdata:
-                            print("Context is ", outdata['Context'])
-                        print("\n")
-                if 'MetricValues' in outdata and verbose:
+                            my_logger.info("Context is ", outdata['Context'])
+                        my_logger.info("\n")
+                if 'MetricValues' in outdata and config['verbose']:
                     metric_array = outdata['MetricValues']
-                    print("Metric Report Name is: ", outdata.get('Name'))
+                    my_logger.info("Metric Report Name is: ", outdata.get('Name'))
                     for metric in metric_array:
-                        print("Member ID is: ", metric.get('MetricId'))
-                        print("Metric Value is: ", metric.get('MetricValue'))
-                        print("TimeStamp is: ", metric.get('Timestamp'))
+                        my_logger.info("Member ID is: ", metric.get('MetricId'))
+                        my_logger.info("Metric Value is: ", metric.get('MetricValue'))
+                        my_logger.info("TimeStamp is: ", metric.get('Timestamp'))
                         if 'MetricProperty' in metric:
-                            print("Metric Property is: ", metric['MetricProperty'])
-                        print("\n")
+                            my_logger.info("Metric Property is: ", metric['MetricProperty'])
+                        my_logger.info("\n")
 
                 ### Check the context and send the status OK if context matches
                 if outdata.get('Context', None) != ContextDetail:
-                    print("Context ({}) does not match with the server ({})."
+                    my_logger.info("Context ({}) does not match with the server ({})."
                           .format(outdata.get('Context', None), ContextDetail))
                 StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
                 connstreamout.send(bytes(StatusCode, 'UTF-8'))
@@ -232,18 +132,18 @@ def process_data(newsocketconn, fromaddr):
                     else:
                         event_count[str(fromaddr[0])] = 1
 
-                    print("Event Counter for Host %s = %s" % (str(fromaddr[0]), event_count[fromaddr[0]]))
-                    print("\n")
+                    my_logger.info("Event Counter for Host %s = %s" % (str(fromaddr[0]), event_count[fromaddr[0]]))
+                    my_logger.info("\n")
                     fd = open(outputfile, "a")
                     fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
                         datetime.now(), event_count[str(fromaddr[0])], str(fromaddr), json.dumps(outdata)))
                     fd.close()
                 except Exception as err:
-                    print(traceback.print_exc())
+                    my_logger.info(traceback.print_exc())
 
             if p.method() == 'GET':
                 # for x in data_buffer:
-                #     print(x)
+                #     my_logger.info(x)
                 res = "HTTP/1.1 200 OK\n" \
                       "Content-Type: application/json\n" \
                       "\n" + json.dumps(data_buffer)
@@ -253,8 +153,8 @@ def process_data(newsocketconn, fromaddr):
 
         except Exception as err:
             outdata = connstreamout.read()
-            print("Data needs to read in normal Text format.")
-            print(outdata)
+            my_logger.info("Data needs to read in normal Text format.")
+            my_logger.info(outdata)
 
     finally:
         connstreamout.shutdown(socket.SHUT_RDWR)
@@ -303,6 +203,7 @@ if __name__ == '__main__':
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
     config['usernames'] = parse_list(parsed_config.get('ServerInformation', 'UserNames'))
     config['passwords'] = parse_list(parsed_config.get('ServerInformation', 'Passwords'))
+    config['logintype'] = parse_list(parsed_config.get('ServerInformation', 'LoginType'))
 
     config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
     config['verbose'] = args.verbose
@@ -310,20 +211,33 @@ if __name__ == '__main__':
     ### Perform the Subscription if provided
     SubscriptionURI, Protocol, ContextDetail, EventTypes, Destination = config['subscriptionURI'], config['protocol'], config['contextdetail'], config['eventtypes'], config['destination']
 
-    payload = {
-        'Destination': config['destination'],
-        'EventTypes': config['eventtypes'],
-        'Context': config['contextdetail'],
-        'Protocol': config['protocol']
-    }
+    target_contexts = []
 
     if not (len(config['serverIPs']) == len(config['usernames']) == len(config['passwords'])):
         my_logger.info("Number of ServerIPs does not match UserNames and Passwords")
     elif len(config['serverIPs']) == 0:
         my_logger.info("No subscriptions are specified. Continuing with Listener.")
     else:
-        for dest, user, passwd in zip(config['serverIPs'], config['usernames'], config['passwords']):
-            PerformSubscription(payload, dest, user, passwd)
+        for dest, user, passwd, logintype in zip(config['serverIPs'], config['usernames'], config['passwords'], config['logintype']):
+            try:
+                ### Create Subsciption on the servers provided by users if any
+                my_logger.info("ServerIP:: {}".format(dest))
+                my_logger.info("UserName:: {}".format(user))
+                my_ctx = redfish_client(dest, user, passwd, timeout=30)
+                my_ctx.login(auth={
+                    "Basic": AuthMethod.BASIC,
+                    "Session": AuthMethod.SESSION,
+                    "None": None
+                }[logintype])
+                response = event_service.create_event_subscription(my_ctx, config['destination'], client_context=config['contextdetail'], event_types=config['eventtypes'])
+                if response.status in [200 + x for x in [0, 1, 2, 3, 4]]:
+                    my_logger.info("Subcription is successful for %s" % dest)
+                else:
+                    my_logger.info("Subcription is not successful for %s or it is already present." % dest)
+                target_contexts.append(my_ctx)
+            except Exception as e:
+                my_logger.info('Issue creating our ctx')
+                my_logger.info(traceback.print_exc())
         my_logger.info("Continuing with Listener.")
 
     ### Accept the TCP connection using certificate validation using Socket wrapper
@@ -352,7 +266,7 @@ if __name__ == '__main__':
                 ### Multiple Threads to handle different request from different servers
                 threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
             except Exception as err:
-                print(traceback.print_exc())
+                my_logger.info(traceback.print_exc())
         except Exception as err:
-            print("Exception occurred in socket binding.")
-            print(traceback.print_exc())
+            my_logger.info("Exception occurred in socket binding.")
+            my_logger.info(traceback.print_exc())
