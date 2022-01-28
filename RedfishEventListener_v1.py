@@ -182,7 +182,9 @@ if __name__ == '__main__':
     parsed_config.read(args.config)
 
     def parse_list(string: str):
-        if re.fullmatch(r'\[\]|\[.*\]', string):
+        if re.fullmatch(r'\[\s*\]', string.strip()) or len(string.strip()) == 0:
+            return []
+        if re.fullmatch(r'\[.*\]', string.strip()):
             string = string.strip('[]')
         return [x.strip("'\"").strip() for x in string.split(',')]
 
@@ -193,16 +195,23 @@ if __name__ == '__main__':
     config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
     config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
-    config['destination'] = parsed_config.get('SubsciptionDetails', 'Destination')
-    config['contextdetail'] = parsed_config.get('SubsciptionDetails', 'Context')
-    config['protocol'] = parsed_config.get('SubsciptionDetails', 'Protocol')
-    config['subscriptionURI'] = parsed_config.get('SubsciptionDetails', 'SubscriptionURI')
-    config['eventtypes'] = parse_list(parsed_config.get('SubsciptionDetails', 'EventTypes'))
+    if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
+        my_logger.error('Use either SubsciptionDetails or SubscriptionDetails in config, not both.')
+        sys.exit(1)
+    my_config_key = "SubsciptionDetails" if parsed_config.has_section("SubsciptionDetails") else "SubscriptionDetails"
+    config['destination'] = parsed_config.get(my_config_key, 'Destination')
+    config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
+    config['protocol'] = parsed_config.get(my_config_key, 'Protocol')
+    config['subscriptionURI'] = parsed_config.get(my_config_key, 'SubscriptionURI')
+    config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
 
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
     config['usernames'] = parse_list(parsed_config.get('ServerInformation', 'UserNames'))
     config['passwords'] = parse_list(parsed_config.get('ServerInformation', 'Passwords'))
-    config['logintype'] = parse_list(parsed_config.get('ServerInformation', 'LoginType'))
+    config['logintype'] = ['Session' for x in config['serverIPs']]
+    if parsed_config.has_option('ServerInformation', 'LoginType'):
+        config['logintype'] = parse_list(parsed_config.get('ServerInformation', 'LoginType'))
+        config['logintype'] += ['Session'] * (len(config['serverIPs']) - len(config['logintype']))
 
     config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
     config['verbose'] = args.verbose
@@ -213,7 +222,8 @@ if __name__ == '__main__':
     target_contexts = []
 
     if not (len(config['serverIPs']) == len(config['usernames']) == len(config['passwords'])):
-        my_logger.info("Number of ServerIPs does not match UserNames and Passwords")
+        my_logger.error("Number of ServerIPs does not match UserNames, Passwords or LoginTypes")
+        sys.exit(1)
     elif len(config['serverIPs']) == 0:
         my_logger.info("No subscriptions are specified. Continuing with Listener.")
     else:
@@ -237,6 +247,7 @@ if __name__ == '__main__':
             except Exception as e:
                 my_logger.info('Issue creating our ctx')
                 my_logger.info(traceback.print_exc())
+                target_contexts.append(None)
         my_logger.info("Continuing with Listener.")
 
     ### Accept the TCP connection using certificate validation using Socket wrapper
@@ -245,27 +256,30 @@ if __name__ == '__main__':
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
 
-    # exit gracefully on CTRL-C
-    import signal
-    signal.signal(signal.SIGINT, lambda: sys.exit(0))
-
     ### Bind socket connection and listen on the specified port
     bindsocket = socket.socket()
     bindsocket.bind((config['listenerip'], config['listenerport']))
     bindsocket.listen(5)
+    bindsocket.settimeout(2)
     my_logger.info('Listening on {}:{} via {}'.format(config['listenerip'], config['listenerport'], 'HTTPS' if useSSL else 'HTTP'))
     event_count = {}
     data_buffer = []
 
+    my_logger.info('Press Ctrl-C to close program')
+
     while True:
+        newsocketconn = None
         try:
             ### Socket Binding
             newsocketconn, fromaddr = bindsocket.accept()
             try:
                 ### Multiple Threads to handle different request from different servers
+                my_logger.info('\nSocket connected::')
                 threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
             except Exception as err:
                 my_logger.info(traceback.print_exc())
+        except socket.timeout:
+            print('.', end='', flush=True)
         except Exception as err:
             my_logger.info("Exception occurred in socket binding.")
             my_logger.info(traceback.print_exc())
