@@ -9,7 +9,6 @@ The Redfish Event Listener is a lightweight HTTP(S) server that can be deployed 
 ## Pre Requisites:
 
 The Redfish Event Listener is based on Python 3 and the client system is required to have the Python framework installed before the tool can be installed and executed on the system.  Additionally, the following packages are required to be installed and accessible from the python environment:
-* requests
 * http_parser
 * redfish
 * redfish_utilities

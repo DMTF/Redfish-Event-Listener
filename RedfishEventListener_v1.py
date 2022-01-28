@@ -11,7 +11,6 @@ from datetime import datetime
 import sys
 import re
 
-import requests
 import threading
 from http_parser.http import HttpStream
 from http_parser.reader import SocketReader

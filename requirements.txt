@@ -1,4 +1,3 @@
-requests
 redfish
 redfish_utilities
 http_parser
