@@ -185,11 +185,12 @@ if __name__ == '__main__':
 
     # Parse our Lists function
     def parse_list(string: str):
+        string = string.strip()
         if re.fullmatch(r'\[\s*\]', string.strip()) or len(string.strip()) == 0:
             return []
-        if re.fullmatch(r'\[.*\]', string.strip()):
+        if string[0] == '[' and string[-1] == ']':
             string = string.strip('[]')
-        return [x.strip("'\"").strip() for x in string.split(',')]
+        return [x.strip().strip("'\"") for x in string.split(',')]
 
     # Host Info
     config['listenerip'] = parsed_config.get('SystemInformation', 'ListenerIP')
@@ -297,16 +298,22 @@ if __name__ == '__main__':
     socket_server = socket.create_server(my_host)
     socket_server.listen(5)
     socket_server.settimeout(3)
+
+    def handler_end(sig, frame):
+        my_logger.error('\nPress Ctrl-C again to skip unsubscribing and logging out.\n')
+        signal.signal(signal.SIGINT, lambda x, y: sys.exit(1))
+
     def handler(sig, frame):
-        if sig == signal.SIGINT:
-            socket_server.close()
+        my_logger.info('Closing all our subscriptions')
+        signal.signal(signal.SIGINT, handler_end)
+        socket_server.close()
 
-            for name, ctx, unsub_id in target_contexts:
-                my_logger.info('\nClosing {}'.format(name))
-                event_service.delete_event_subscription(ctx, unsub_id)
-                ctx.logout()
+        for name, ctx, unsub_id in target_contexts:
+            my_logger.info('\nClosing {}'.format(name))
+            event_service.delete_event_subscription(ctx, unsub_id)
+            ctx.logout()
 
-            sys.exit(0)
+        sys.exit(0)
     signal.signal(signal.SIGINT, handler)
 
     while True:
