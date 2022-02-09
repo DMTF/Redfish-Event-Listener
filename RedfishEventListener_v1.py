@@ -35,14 +35,16 @@ config = {
     'destination': 'https://contoso.com',
     'eventtypes': ['Alert'],
     'contextdetail': 'Public',
-    'protocol': 'Redfish',
-    'subscriptionURI': '/redfish/v1/EventService/Subscriptions',
     'serverIPs': [],
     'usernames': [],
     'passwords': [],
     "logintype": [],
     'certcheck': True,
-    'verbose': False
+    'verbose': False,
+    'format': '',
+    'expand': False,
+    'resourcetypes': [],
+    'registries': []
 }
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
@@ -205,9 +207,11 @@ if __name__ == '__main__':
     my_config_key = "SubsciptionDetails" if parsed_config.has_section("SubsciptionDetails") else "SubscriptionDetails"
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
     config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
-    config['protocol'] = parsed_config.get(my_config_key, 'Protocol')
-    config['subscriptionURI'] = parsed_config.get(my_config_key, 'SubscriptionURI')
     config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
+    config['format'] = parsed_config.get(my_config_key, 'Format')
+    config['expand'] = parsed_config.get(my_config_key, 'Expand')
+    config['resourcetypes'] = parse_list(parsed_config.get(my_config_key, 'ResourceTypes'))
+    config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
 
     # Subscription Targets
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
@@ -223,7 +227,7 @@ if __name__ == '__main__':
     config['verbose'] = args.verbose
 
     ### Perform the Subscription if provided
-    SubscriptionURI, Protocol, ContextDetail, EventTypes, Destination = config['subscriptionURI'], config['protocol'], config['contextdetail'], config['eventtypes'], config['destination']
+    ContextDetail, EventTypes, Destination = config['contextdetail'], config['eventtypes'], config['destination']
 
     target_contexts = []
 
@@ -253,7 +257,13 @@ if __name__ == '__main__':
             if my_ctx:
                 unsub_id = None
                 try:
-                    response = event_service.create_event_subscription(my_ctx, config['destination'], client_context=config['contextdetail'], event_types=config['eventtypes'])
+                    response = event_service.create_event_subscription(my_ctx, config['destination'],
+                                                        client_context=config['contextdetail'],
+                                                        event_types=config['eventtypes'],
+                                                        format=config['format'],
+                                                        expand=config['expand'],
+                                                        resource_types=config['resourcetypes'],
+                                                        registries=config['registries'])
                 except Exception as e:
                     my_logger.info('Issue creating our event')
                     my_logger.info(traceback.print_exc())
@@ -267,7 +277,7 @@ if __name__ == '__main__':
                         unsub_id = my_location.split('/')[-1]
                 else:
                     my_logger.info("Subcription is not successful for {} or it is already present...".format(dest))
-                target_contexts.append((my_ctx, unsub_id))
+                target_contexts.append((dest, my_ctx, unsub_id))
         my_logger.info("Continuing with Listener.")
 
     ### Accept the TCP connection using certificate validation using Socket wrapper
@@ -290,9 +300,12 @@ if __name__ == '__main__':
     def handler(sig, frame):
         if sig == signal.SIGINT:
             socket_server.close()
-            for ctx, unsub_id in target_contexts:
+
+            for name, ctx, unsub_id in target_contexts:
+                my_logger.info('\nClosing {}'.format(name))
                 event_service.delete_event_subscription(ctx, unsub_id)
                 ctx.logout()
+
             sys.exit(0)
     signal.signal(signal.SIGINT, handler)
 
