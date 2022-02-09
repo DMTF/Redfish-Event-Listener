@@ -2,14 +2,14 @@
 # Copyright 2017-2019 DMTF. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/master/LICENSE.md
 
-import socket
 import traceback
 import logging
 import json
 import ssl
-from datetime import datetime
-import sys
+import sys, signal
 import re
+import socket
+from datetime import datetime
 
 import threading
 from http_parser.http import HttpStream
@@ -176,11 +176,12 @@ if __name__ == '__main__':
     argget.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity of tool in stdout')
     args = argget.parse_args()
 
-    ### Initializing the global parameter
+    # Initiate Configuration File
     from configparser import ConfigParser
     parsed_config = ConfigParser()
     parsed_config.read(args.config)
 
+    # Parse our Lists function
     def parse_list(string: str):
         if re.fullmatch(r'\[\s*\]', string.strip()) or len(string.strip()) == 0:
             return []
@@ -188,13 +189,16 @@ if __name__ == '__main__':
             string = string.strip('[]')
         return [x.strip("'\"").strip() for x in string.split(',')]
 
+    # Host Info
     config['listenerip'] = parsed_config.get('SystemInformation', 'ListenerIP')
     config['listenerport'] = parsed_config.getint('SystemInformation', 'ListenerPort')
     config['usessl'] = parsed_config.getboolean('SystemInformation', 'UseSSL')
 
+    # Cert Info
     config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
     config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
+    # Subscription Details
     if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
         my_logger.error('Use either SubsciptionDetails or SubscriptionDetails in config, not both.')
         sys.exit(1)
@@ -205,6 +209,7 @@ if __name__ == '__main__':
     config['subscriptionURI'] = parsed_config.get(my_config_key, 'SubscriptionURI')
     config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
 
+    # Subscription Targets
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
     config['usernames'] = parse_list(parsed_config.get('ServerInformation', 'UserNames'))
     config['passwords'] = parse_list(parsed_config.get('ServerInformation', 'Passwords'))
@@ -213,6 +218,7 @@ if __name__ == '__main__':
         config['logintype'] = parse_list(parsed_config.get('ServerInformation', 'LoginType'))
         config['logintype'] += ['Session'] * (len(config['serverIPs']) - len(config['logintype']))
 
+    # Other Info
     config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
     config['verbose'] = args.verbose
 
@@ -232,22 +238,36 @@ if __name__ == '__main__':
                 ### Create Subsciption on the servers provided by users if any
                 my_logger.info("ServerIP:: {}".format(dest))
                 my_logger.info("UserName:: {}".format(user))
+
                 my_ctx = redfish_client(dest, user, passwd, timeout=30)
                 my_ctx.login(auth={
                     "Basic": AuthMethod.BASIC,
                     "Session": AuthMethod.SESSION,
                     "None": None
                 }[logintype])
-                response = event_service.create_event_subscription(my_ctx, config['destination'], client_context=config['contextdetail'], event_types=config['eventtypes'])
-                if response.status in [200 + x for x in [0, 1, 2, 3, 4]]:
-                    my_logger.info("Subcription is successful for %s" % dest)
-                else:
-                    my_logger.info("Subcription is not successful for %s or it is already present." % dest)
-                target_contexts.append(my_ctx)
             except Exception as e:
+                my_ctx = None
                 my_logger.info('Issue creating our ctx')
                 my_logger.info(traceback.print_exc())
-                target_contexts.append(None)
+
+            if my_ctx:
+                unsub_id = None
+                try:
+                    response = event_service.create_event_subscription(my_ctx, config['destination'], client_context=config['contextdetail'], event_types=config['eventtypes'])
+                except Exception as e:
+                    my_logger.info('Issue creating our event')
+                    my_logger.info(traceback.print_exc())
+
+                if response and response.status in [200 + x for x in [0, 1, 2, 3, 4]]:
+                    my_location = response.getheader('Location')
+                    my_logger.info("Subcription is successful for {}, {}".format(dest, my_location))
+                    if my_location in ['', None]:
+                        my_logger.error('Our service did not provide a Location for our Subscription, will be unable to unsubscribe')
+                    else:
+                        unsub_id = my_location.split('/')[-1]
+                else:
+                    my_logger.info("Subcription is not successful for {} or it is already present...".format(dest))
+                target_contexts.append((my_ctx, unsub_id))
         my_logger.info("Continuing with Listener.")
 
     ### Accept the TCP connection using certificate validation using Socket wrapper
@@ -257,21 +277,30 @@ if __name__ == '__main__':
         context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
 
     ### Bind socket connection and listen on the specified port
-    bindsocket = socket.socket()
-    bindsocket.bind((config['listenerip'], config['listenerport']))
-    bindsocket.listen(5)
-    bindsocket.settimeout(2)
+    my_host =  (config['listenerip'], config['listenerport'])
     my_logger.info('Listening on {}:{} via {}'.format(config['listenerip'], config['listenerport'], 'HTTPS' if useSSL else 'HTTP'))
     event_count = {}
     data_buffer = []
 
     my_logger.info('Press Ctrl-C to close program')
 
+    socket_server = socket.create_server(my_host)
+    socket_server.listen(5)
+    socket_server.settimeout(3)
+    def handler(sig, frame):
+        if sig == signal.SIGINT:
+            socket_server.close()
+            for ctx, unsub_id in target_contexts:
+                event_service.delete_event_subscription(ctx, unsub_id)
+                ctx.logout()
+            sys.exit(0)
+    signal.signal(signal.SIGINT, handler)
+
     while True:
         newsocketconn = None
         try:
             ### Socket Binding
-            newsocketconn, fromaddr = bindsocket.accept()
+            newsocketconn, fromaddr = socket_server.accept()
             try:
                 ### Multiple Threads to handle different request from different servers
                 my_logger.info('\nSocket connected::')
