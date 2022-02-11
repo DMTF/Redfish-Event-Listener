@@ -33,8 +33,8 @@ config = {
     'certfile': 'cert.pem',
     'keyfile': 'server.key',
     'destination': 'https://contoso.com',
-    'eventtypes': ['Alert'],
-    'contextdetail': 'Public',
+    'eventtypes': None,
+    'contextdetail': None,
     'serverIPs': [],
     'usernames': [],
     'passwords': [],
@@ -207,8 +207,10 @@ if __name__ == '__main__':
         sys.exit(1)
     my_config_key = "SubsciptionDetails" if parsed_config.has_section("SubsciptionDetails") else "SubscriptionDetails"
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
-    config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
-    config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
+    if parsed_config.has_option(my_config_key, 'Context'):
+        config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
+    if parsed_config.has_option(my_config_key, 'EventTypes'):
+        config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
     if parsed_config.has_option(my_config_key, 'Format'):
         config['format'] = parsed_config.get(my_config_key, 'Format')
     if parsed_config.has_option(my_config_key, 'Expand'):
@@ -217,9 +219,12 @@ if __name__ == '__main__':
         config['resourcetypes'] = parse_list(parsed_config.get(my_config_key, 'ResourceTypes'))
     if parsed_config.has_option(my_config_key, 'Registries'):
         config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
-    for k in ['format', 'expand', 'resourcetypes', 'registries']:
+    for k in ['format', 'expand', 'resourcetypes', 'registries', 'contextdetail', 'eventtypes']:
         if config[k] in ['', [], None]:
-            config[k] = None
+            if k == 'eventtypes':
+                config[k] = []
+            else:
+                config[k] = None
 
     # Subscription Targets
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
@@ -233,6 +238,9 @@ if __name__ == '__main__':
     # Other Info
     config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
     config['verbose'] = args.verbose
+
+    if config['verbose']:
+        print(json.dumps(config, indent=4))
 
     ### Perform the Subscription if provided
     ContextDetail, EventTypes, Destination = config['contextdetail'], config['eventtypes'], config['destination']
