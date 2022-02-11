@@ -221,10 +221,7 @@ if __name__ == '__main__':
         config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
     for k in ['format', 'expand', 'resourcetypes', 'registries', 'contextdetail', 'eventtypes']:
         if config[k] in ['', [], None]:
-            if k == 'eventtypes':
-                config[k] = []
-            else:
-                config[k] = None
+            config[k] = None
 
     # Subscription Targets
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))
