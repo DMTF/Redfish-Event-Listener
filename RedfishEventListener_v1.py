@@ -41,10 +41,10 @@ config = {
     "logintype": [],
     'certcheck': True,
     'verbose': False,
-    'format': '',
-    'expand': False,
-    'resourcetypes': [],
-    'registries': []
+    'format': None,
+    'expand': None,
+    'resourcetypes': None,
+    'registries': None
 }
 
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
@@ -209,10 +209,17 @@ if __name__ == '__main__':
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
     config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
     config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
-    config['format'] = parsed_config.get(my_config_key, 'Format')
-    config['expand'] = parsed_config.get(my_config_key, 'Expand')
-    config['resourcetypes'] = parse_list(parsed_config.get(my_config_key, 'ResourceTypes'))
-    config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
+    if parsed_config.has_option(my_config_key, 'Format'):
+        config['format'] = parsed_config.get(my_config_key, 'Format')
+    if parsed_config.has_option(my_config_key, 'Expand'):
+        config['expand'] = parsed_config.get(my_config_key, 'Expand')
+    if parsed_config.has_option(my_config_key, 'ResourceTypes'):
+        config['resourcetypes'] = parse_list(parsed_config.get(my_config_key, 'ResourceTypes'))
+    if parsed_config.has_option(my_config_key, 'Registries'):
+        config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
+    for k in ['format', 'expand', 'resourcetypes', 'registries']:
+        if config[k] in ['', [], None]:
+            config[k] = None
 
     # Subscription Targets
     config['serverIPs'] = parse_list(parsed_config.get('ServerInformation', 'ServerIPs'))

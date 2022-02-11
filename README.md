@@ -32,7 +32,9 @@ The following details will need to be entered in the config.ini file:
     * ListenerPort: the port number to listen on for event messages
     * UseSSL: 'on' to use HTTPS (SSL), 'off' to use HTTP for incoming event messages
 3. Subscription details if you require this tool to perform subscription, which consist of the following:
-    * Subscription details of Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI in config.ini file
+    * Subscription details of in config.ini file
+        * Destination, EventTypes, ContextDetail, Protocol, SubscriptionURI
+        * Optional: Format, Expand, ResourceTypes, Registries
     * Server information contains lists with IP, Username and password. Keep all these field as empty lists [] if subscription is taken care manually
     * LoginTypes under Server information is an optional setting to apply "Basic" or "Session" authentication measures.  This defaults to "Session" for all services.
 4. If the service is subscribed manually, the context needs to be set same as mentioned in the config file (Public by default)
