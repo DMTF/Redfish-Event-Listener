@@ -1,5 +1,5 @@
 # Copyright Notice:
-# Copyright 2017-2019 DMTF. All rights reserved.
+# Copyright 2017-2022 DMTF. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/master/LICENSE.md
 
 import traceback
@@ -39,7 +39,6 @@ config = {
     'usernames': [],
     'passwords': [],
     "logintype": [],
-    'certcheck': True,
     'verbose': False,
     'format': None,
     'expand': None,
@@ -90,10 +89,14 @@ def process_data(newsocketconn, fromaddr):
                         my_logger.info("MessageId is ", event['MessageId'])
                         if 'EventId' in event:
                             my_logger.info("EventId is ", event['EventId'])
+                        if 'EventGroupId' in event:
+                            my_logger.info("EventGroupId is ", event['EventGroupId'])
                         if 'EventTimestamp' in event:
                             my_logger.info("EventTimestamp is ", event['EventTimestamp'])
                         if 'Severity' in event:
                             my_logger.info("Severity is ", event['Severity'])
+                        if 'MessageSeverity' in event:
+                            my_logger.info("MessageSeverity is ", event['MessageSeverity'])
                         if 'Message' in event:
                             my_logger.info("Message is ", event['Message'])
                         if 'MessageArgs' in event:
@@ -113,7 +116,7 @@ def process_data(newsocketconn, fromaddr):
                         my_logger.info("\n")
 
                 ### Check the context and send the status OK if context matches
-                if outdata.get('Context', None) != ContextDetail:
+                if ContextDetail is not None and outdata.get('Context', None) != ContextDetail:
                     my_logger.info("Context ({}) does not match with the server ({})."
                           .format(outdata.get('Context', None), ContextDetail))
                 StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
@@ -174,8 +177,8 @@ if __name__ == '__main__':
     argget = argparse.ArgumentParser(description='Redfish Event Listener (v{}) is a tool that deploys an HTTP(S) server to read and record events from Redfish services.'.format(tool_version))
 
     # config
-    argget.add_argument('-c', '--config', type=str, default='./config.ini', help='Specifies the location of our configuration file (default: ./config.ini)')
-    argget.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity of tool in stdout')
+    argget.add_argument('-c', '--config', type=str, default='./config.ini', help='Location of the configuration file; default: "./config.ini"')
+    argget.add_argument('-v', '--verbose', action='count', default=0, help='Verbose output')
     args = argget.parse_args()
 
     # Initiate Configuration File
@@ -198,8 +201,9 @@ if __name__ == '__main__':
     config['usessl'] = parsed_config.getboolean('SystemInformation', 'UseSSL')
 
     # Cert Info
-    config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
-    config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
+    if config['usessl']:
+        config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
+        config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
     # Subscription Details
     if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
@@ -233,7 +237,6 @@ if __name__ == '__main__':
         config['logintype'] += ['Session'] * (len(config['serverIPs']) - len(config['logintype']))
 
     # Other Info
-    config['certcheck'] = parsed_config.getboolean('ServerInformation', 'certcheck')
     config['verbose'] = args.verbose
 
     if config['verbose']:
@@ -245,14 +248,14 @@ if __name__ == '__main__':
     target_contexts = []
 
     if not (len(config['serverIPs']) == len(config['usernames']) == len(config['passwords'])):
-        my_logger.error("Number of ServerIPs does not match UserNames, Passwords or LoginTypes")
+        my_logger.error("Number of ServerIPs does not match UserNames, Passwords, or LoginTypes")
         sys.exit(1)
     elif len(config['serverIPs']) == 0:
         my_logger.info("No subscriptions are specified. Continuing with Listener.")
     else:
         for dest, user, passwd, logintype in zip(config['serverIPs'], config['usernames'], config['passwords'], config['logintype']):
             try:
-                ### Create Subsciption on the servers provided by users if any
+                ### Create Subscription on the servers provided by users if any
                 my_logger.info("ServerIP:: {}".format(dest))
                 my_logger.info("UserName:: {}".format(user))
 
