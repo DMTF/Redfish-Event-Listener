@@ -16,7 +16,7 @@ from http_parser.http import HttpStream
 from http_parser.reader import SocketReader
 
 from redfish import redfish_client, AuthMethod
-import redfish_utilities.event_service as event_service
+import redfish_utilities
 
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
@@ -63,13 +63,13 @@ def process_data(newsocketconn, fromaddr):
             r = SocketReader(connstreamout)
             p = HttpStream(r)
             headers = p.headers()
-            my_logger.info("headers: ", headers)
+            my_logger.info("headers: %s", headers)
 
             if p.method() == 'POST':
                 bodydata = p.body_file().read()
                 bodydata = bodydata.decode("utf-8")
                 my_logger.info("\n")
-                my_logger.info("bodydata: ", bodydata)
+                my_logger.info("bodydata: %s", bodydata)
                 data_buffer.append(bodydata)
                 for eachHeader in headers.items():
                     if eachHeader[0] == 'Host' or eachHeader[0] == 'host':
@@ -77,48 +77,48 @@ def process_data(newsocketconn, fromaddr):
 
                 ### Read the json response and print the output
                 my_logger.info("\n")
-                my_logger.info("Server IP Address is ", fromaddr[0])
-                my_logger.info("Server PORT number is ", fromaddr[1])
-                my_logger.info("Listener IP is ", HostDetails)
+                my_logger.info("Server IP Address is %s", fromaddr[0])
+                my_logger.info("Server PORT number is %s", fromaddr[1])
+                my_logger.info("Listener IP is %s", HostDetails)
                 my_logger.info("\n")
                 outdata = json.loads(bodydata)
                 if 'Events' in outdata and config['verbose']:
                     event_array = outdata['Events']
                     for event in event_array:
-                        my_logger.info("EventType is ", event['EventType'])
-                        my_logger.info("MessageId is ", event['MessageId'])
+                        my_logger.info("EventType is %s", event['EventType'])
+                        my_logger.info("MessageId is %s", event['MessageId'])
                         if 'EventId' in event:
-                            my_logger.info("EventId is ", event['EventId'])
+                            my_logger.info("EventId is %s", event['EventId'])
                         if 'EventGroupId' in event:
-                            my_logger.info("EventGroupId is ", event['EventGroupId'])
+                            my_logger.info("EventGroupId is %s", event['EventGroupId'])
                         if 'EventTimestamp' in event:
-                            my_logger.info("EventTimestamp is ", event['EventTimestamp'])
+                            my_logger.info("EventTimestamp is %s", event['EventTimestamp'])
                         if 'Severity' in event:
-                            my_logger.info("Severity is ", event['Severity'])
+                            my_logger.info("Severity is %s", event['Severity'])
                         if 'MessageSeverity' in event:
-                            my_logger.info("MessageSeverity is ", event['MessageSeverity'])
+                            my_logger.info("MessageSeverity is %s", event['MessageSeverity'])
                         if 'Message' in event:
-                            my_logger.info("Message is ", event['Message'])
+                            my_logger.info("Message is %s", event['Message'])
                         if 'MessageArgs' in event:
-                            my_logger.info("MessageArgs is ", event['MessageArgs'])
+                            my_logger.info("MessageArgs is %s", event['MessageArgs'])
                         if 'Context' in outdata:
-                            my_logger.info("Context is ", outdata['Context'])
+                            my_logger.info("Context is %s", outdata['Context'])
                         my_logger.info("\n")
                 if 'MetricValues' in outdata and config['verbose']:
                     metric_array = outdata['MetricValues']
-                    my_logger.info("Metric Report Name is: ", outdata.get('Name'))
+                    my_logger.info("Metric Report Name is: %s", outdata.get('Name'))
                     for metric in metric_array:
-                        my_logger.info("Member ID is: ", metric.get('MetricId'))
-                        my_logger.info("Metric Value is: ", metric.get('MetricValue'))
-                        my_logger.info("TimeStamp is: ", metric.get('Timestamp'))
+                        my_logger.info("Member ID is: %s", metric.get('MetricId'))
+                        my_logger.info("Metric Value is: %s", metric.get('MetricValue'))
+                        my_logger.info("TimeStamp is: %s", metric.get('Timestamp'))
                         if 'MetricProperty' in metric:
-                            my_logger.info("Metric Property is: ", metric['MetricProperty'])
+                            my_logger.info("Metric Property is: %s", metric['MetricProperty'])
                         my_logger.info("\n")
 
                 ### Check the context and send the status OK if context matches
-                if ContextDetail is not None and outdata.get('Context', None) != ContextDetail:
+                if config['contextdetail'] is not None and outdata.get('Context', None) != config['contextdetail']:
                     my_logger.info("Context ({}) does not match with the server ({})."
-                          .format(outdata.get('Context', None), ContextDetail))
+                          .format(outdata.get('Context', None), config['contextdetail']))
                 StatusCode = """HTTP/1.1 200 OK\r\n\r\n"""
                 connstreamout.send(bytes(StatusCode, 'UTF-8'))
                 with open(logfile, 'a') as f:
@@ -154,7 +154,6 @@ def process_data(newsocketconn, fromaddr):
                 connstreamout.send(res.encode())
                 data_buffer.clear()
 
-
         except Exception as err:
             outdata = connstreamout.read()
             my_logger.info("Data needs to read in normal Text format.")
@@ -171,7 +170,7 @@ if __name__ == '__main__':
     Main program
     """
 
-    ### Print the tool banner
+    # Print the tool banner
     logging.info('Redfish Event Listener v{}'.format(tool_version))
 
     argget = argparse.ArgumentParser(description='Redfish Event Listener (v{}) is a tool that deploys an HTTP(S) server to read and record events from Redfish services.'.format(tool_version))
@@ -186,7 +185,7 @@ if __name__ == '__main__':
     parsed_config = ConfigParser()
     parsed_config.read(args.config)
 
-    # Parse our Lists function
+    # Inline helper to help parse lists into arrays
     def parse_list(string: str):
         string = string.strip()
         if re.fullmatch(r'\[\s*\]', string.strip()) or len(string.strip()) == 0:
@@ -238,79 +237,76 @@ if __name__ == '__main__':
 
     # Other Info
     config['verbose'] = args.verbose
-
     if config['verbose']:
         print(json.dumps(config, indent=4))
 
-    ### Perform the Subscription if provided
-    ContextDetail, EventTypes, Destination = config['contextdetail'], config['eventtypes'], config['destination']
-
+    # Perform the Subscription if provided
     target_contexts = []
-
     if not (len(config['serverIPs']) == len(config['usernames']) == len(config['passwords'])):
         my_logger.error("Number of ServerIPs does not match UserNames, Passwords, or LoginTypes")
         sys.exit(1)
     elif len(config['serverIPs']) == 0:
         my_logger.info("No subscriptions are specified. Continuing with Listener.")
     else:
+        # Create the subscriptions on the Redfish services provided
         for dest, user, passwd, logintype in zip(config['serverIPs'], config['usernames'], config['passwords'], config['logintype']):
             try:
-                ### Create Subscription on the servers provided by users if any
+                # Log in to the service
                 my_logger.info("ServerIP:: {}".format(dest))
                 my_logger.info("UserName:: {}".format(user))
-
                 my_ctx = redfish_client(dest, user, passwd, timeout=30)
-                my_ctx.login(auth={
-                    "Basic": AuthMethod.BASIC,
-                    "Session": AuthMethod.SESSION,
-                    "None": None
-                }[logintype])
-            except Exception as e:
-                my_ctx = None
-                my_logger.info('Issue creating our ctx')
-                my_logger.info(traceback.print_exc())
+                my_ctx.login(auth=logintype.tolower())
 
-            if my_ctx:
+                # Create the subscription
+                response = redfish_utilities.create_event_subscription(my_ctx, config['destination'],
+                                                                       client_context=config['contextdetail'],
+                                                                       event_types=config['eventtypes'],
+                                                                       format=config['format'],
+                                                                       expand=config['expand'],
+                                                                       resource_types=config['resourcetypes'],
+                                                                       registries=config['registries'])
+
+                # Save the subscription info for deleting later
+                my_location = response.getheader('Location')
+                my_logger.info("Subcription is successful for {}, {}".format(dest, my_location))
                 unsub_id = None
                 try:
-                    response = event_service.create_event_subscription(my_ctx, config['destination'],
-                                                        client_context=config['contextdetail'],
-                                                        event_types=config['eventtypes'],
-                                                        format=config['format'],
-                                                        expand=config['expand'],
-                                                        resource_types=config['resourcetypes'],
-                                                        registries=config['registries'])
-                except Exception as e:
-                    my_logger.info('Issue creating our event')
-                    my_logger.info(traceback.print_exc())
-
-                if response and response.status in [200 + x for x in [0, 1, 2, 3, 4]]:
-                    my_location = response.getheader('Location')
-                    my_logger.info("Subcription is successful for {}, {}".format(dest, my_location))
-                    if my_location in ['', None]:
-                        my_logger.error('Our service did not provide a Location for our Subscription, will be unable to unsubscribe')
-                    else:
-                        unsub_id = my_location.split('/')[-1]
+                    # Response bodies are expected to have the event destination
+                    unsub_id = response.dict['Id']
+                except:
+                    # Fallback to determining the Id from the Location header
+                    if my_location is not None:
+                        unsub_id = my_location.strip('/').split('/')[-1]
+                if unsub_id is None:
+                    my_logger.error('{} did not provide a location for the subscription; cannot unsubscribe'.format(dest))
                 else:
-                    my_logger.info("Subcription is not successful for {} or it is already present...".format(dest))
-                target_contexts.append((dest, my_ctx, unsub_id))
+                    target_contexts.append((dest, my_ctx, unsub_id))
+            except Exception as e:
+                my_logger.info('Unable to subscribe for events with {}'.format(dest))
+                my_logger.info(traceback.print_exc())
+
         my_logger.info("Continuing with Listener.")
 
-    ### Accept the TCP connection using certificate validation using Socket wrapper
+    # Accept the TCP connection using certificate validation using Socket wrapper
     useSSL = config['usessl']
     if useSSL:
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
 
-    ### Bind socket connection and listen on the specified port
-    my_host =  (config['listenerip'], config['listenerport'])
+    # Bind socket connection and listen on the specified port
+    my_host = (config['listenerip'], config['listenerport'])
     my_logger.info('Listening on {}:{} via {}'.format(config['listenerip'], config['listenerport'], 'HTTPS' if useSSL else 'HTTP'))
     event_count = {}
     data_buffer = []
 
     my_logger.info('Press Ctrl-C to close program')
 
-    socket_server = socket.create_server(my_host)
+    # Check if the listener is IPv4 or IPv6; defaults to IPv4 if the lookup fails
+    try:
+        family = socket.getaddrinfo(config['listenerip'], config['listenerport'])[0][0]
+    except:
+        family = socket.AF_INET
+    socket_server = socket.create_server(my_host, family=family)
     socket_server.listen(5)
     socket_server.settimeout(3)
 
@@ -325,8 +321,12 @@ if __name__ == '__main__':
 
         for name, ctx, unsub_id in target_contexts:
             my_logger.info('\nClosing {}'.format(name))
-            event_service.delete_event_subscription(ctx, unsub_id)
-            ctx.logout()
+            try:
+                redfish_utilities.delete_event_subscription(ctx, unsub_id)
+                ctx.logout()
+            except:
+                my_logger.info('Unable to unsubscribe for events with {}'.format(ctx.get_base_url()))
+                my_logger.info(traceback.print_exc())
 
         sys.exit(0)
     signal.signal(signal.SIGINT, handler)

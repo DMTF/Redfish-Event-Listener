@@ -38,8 +38,8 @@ The `Information` section contains details about the configuration file itself. 
 
 The `SystemInformation` section contains settings for the system acting as the event listener.  All options in this section are required.  The following options are found in this section:
 
-* `ListenerIP`: The interface to use to listen for events.  This is typically 0.0.0.0 to listen on all interfaces.
-* `ListenerPort`: The port number to use to listen for events.  This is typically 80 for HTTP or 443 for HTTPS.
+* `ListenerIP`: The interface to use to listen for events.  This is typically `0.0.0.0` to listen on all interfaces for IPv4 or `::` to listen on all interfaces for IPv6.
+* `ListenerPort`: The port number to use to listen for events.  This is typically `80` for HTTP or `443` for HTTPS.
 * `UseSSL`: `on` to use HTTPS, `off` to use HTTP for incoming event messages.  If HTTPS is to be used, the `CertificateDetails` section will need to be configured.
 
 The `CertificateDetails` section contains the certificate information for the system acting as the event listener.  This section and its options are only required if `UseSSL` in `SystemInformation` is set to `on`.  The following options are found in this section:
