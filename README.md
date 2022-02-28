@@ -76,3 +76,13 @@ The tool can be stopped by issuing a keyboard interrupt (CTRL-C).
 
 * The subscription information remains the same for all the subscriptions initiated from the tool.
 * The event counter will restart in the event file each time the tool is restarted.
+
+## Release Process
+
+Run the `release.sh` script to publish a new version.
+
+```bash
+sh release.sh <NewVersion>
+```
+
+Enter the release notes when prompted; an empty line signifies no more notes to add.
