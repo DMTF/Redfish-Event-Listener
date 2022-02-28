@@ -24,7 +24,7 @@ standard_out = logging.StreamHandler(sys.stdout)
 standard_out.setLevel(logging.INFO)
 my_logger.addHandler(standard_out)
 
-tool_version = '1.0.3'
+tool_version = '1.1.0'
 
 config = {
     'listenerip': '0.0.0.0',
