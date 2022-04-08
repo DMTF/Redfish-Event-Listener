@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.1] - 2022-04-08
+- Added 'Connection: close' header to responses
+
 ## [1.1.0] - 2022-02-28
 - Added IPv6 support
 - Replaced internal HTTP calls with the 'redfish-utilities' module
