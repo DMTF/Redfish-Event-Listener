@@ -257,7 +257,7 @@ if __name__ == '__main__':
                 my_logger.info("ServerIP:: {}".format(dest))
                 my_logger.info("UserName:: {}".format(user))
                 my_ctx = redfish_client(dest, user, passwd, timeout=30)
-                my_ctx.login(auth=logintype.tolower())
+                my_ctx.login(auth=logintype.lower())
 
                 # Create the subscription
                 response = redfish_utilities.create_event_subscription(my_ctx, config['destination'],
