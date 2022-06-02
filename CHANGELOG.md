@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.2] - 2022-06-02
+- Corrected usage of 'lower' method for the authentication type
+
 ## [1.1.1] - 2022-04-08
 - Added 'Connection: close' header to responses
 
