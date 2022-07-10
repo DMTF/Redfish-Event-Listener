@@ -24,7 +24,7 @@ standard_out = logging.StreamHandler(sys.stdout)
 standard_out.setLevel(logging.INFO)
 my_logger.addHandler(standard_out)
 
-tool_version = '1.1.2'
+tool_version = '1.1.3'
 
 config = {
     'listenerip': '0.0.0.0',
@@ -214,8 +214,6 @@ if __name__ == '__main__':
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
     if parsed_config.has_option(my_config_key, 'Context'):
         config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
-    if parsed_config.has_option(my_config_key, 'EventTypes'):
-        config['eventtypes'] = parse_list(parsed_config.get(my_config_key, 'EventTypes'))
     if parsed_config.has_option(my_config_key, 'Format'):
         config['format'] = parsed_config.get(my_config_key, 'Format')
     if parsed_config.has_option(my_config_key, 'Expand'):
@@ -224,7 +222,7 @@ if __name__ == '__main__':
         config['resourcetypes'] = parse_list(parsed_config.get(my_config_key, 'ResourceTypes'))
     if parsed_config.has_option(my_config_key, 'Registries'):
         config['registries'] = parse_list(parsed_config.get(my_config_key, 'Registries'))
-    for k in ['format', 'expand', 'resourcetypes', 'registries', 'contextdetail', 'eventtypes']:
+    for k in ['format', 'resourcetypes', 'registries', 'contextdetail']:
         if config[k] in ['', [], None]:
             config[k] = None
 
@@ -260,11 +258,11 @@ if __name__ == '__main__':
                 my_ctx.login(auth=logintype.lower())
 
                 # Create the subscription
+                # Property "expand" was removed.
+                # Could not find any reference to this property in the DMTF standard v1.15.1.
                 response = redfish_utilities.create_event_subscription(my_ctx, config['destination'],
                                                                        client_context=config['contextdetail'],
-                                                                       event_types=config['eventtypes'],
                                                                        format=config['format'],
-                                                                       expand=config['expand'],
                                                                        resource_types=config['resourcetypes'],
                                                                        registries=config['registries'])
 

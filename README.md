@@ -52,10 +52,10 @@ The `SubscriptionDetails` section contains subscription information so that the 
 * `Destination`: The URI of the event listener.  The Redfish service will perform an HTTP POST on this URI to send events to the event listener.
 * `Context`: The context string to be transmitted back by the Redfish service when sending events.
 * `Format`: The format of the event notifications the event listener will receive.  Possible values are `Event` and `MetricReport`.
-* `Expand`: `true` indicates if the `OriginOfCondition` property will contain the expanded resource in the event payload.  `false` indicates no payload expansion.
 * `ResourceTypes`: An array of resource types the Redfish service will use to filter events for the event listener.  Some examples include `Chassis`, `Manager`, and `ComputerSystem`.
 * `Registries`: An array of registry names the Redfish service will use to filter events for the event listener.  Some examples include `ResourceEvent` and `TaskEvent`.
-* `EventTypes`: An array of classes of events the event listener will receive.  This setting has been deprecated by Redfish in favor of the above settings.  Possible values are `StatusChange`, `ResourceUpdated`, `ResourceAdded`, `ResourceRemoved`, `Alert`, `MetricReport`, and `Other`.
+
+Note: The `EventTypes` and `Expand` properties have been removed from `config.ini`. The `EventTypes` property was deprecated in Redfish v1.6.0.
 
 The `ServerInformation` section contains information about the Redfish services that will transmit events to the event listener.  All options in this section, except `LoginType`, are required.  The following options are found in this section:
 
