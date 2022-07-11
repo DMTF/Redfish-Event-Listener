@@ -24,7 +24,7 @@ standard_out = logging.StreamHandler(sys.stdout)
 standard_out.setLevel(logging.INFO)
 my_logger.addHandler(standard_out)
 
-tool_version = '1.1.2'
+tool_version = '1.1.3'
 
 config = {
     'listenerip': '0.0.0.0',
@@ -207,10 +207,7 @@ if __name__ == '__main__':
         config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
     # Subscription Details
-    if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
-        my_logger.error('Use either SubsciptionDetails or SubscriptionDetails in config, not both.')
-        sys.exit(1)
-    my_config_key = "SubsciptionDetails" if parsed_config.has_section("SubsciptionDetails") else "SubscriptionDetails"
+    my_config_key = "SubscriptionDetails"
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
     if parsed_config.has_option(my_config_key, 'Context'):
         config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
@@ -270,7 +267,7 @@ if __name__ == '__main__':
 
                 # Save the subscription info for deleting later
                 my_location = response.getheader('Location')
-                my_logger.info("Subcription is successful for {}, {}".format(dest, my_location))
+                my_logger.info("Subscription is successful for {}, {}".format(dest, my_location))
                 unsub_id = None
                 try:
                     # Response bodies are expected to have the event destination
