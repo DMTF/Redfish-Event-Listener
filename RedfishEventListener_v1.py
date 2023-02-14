@@ -119,7 +119,7 @@ def process_data(newsocketconn, fromaddr):
                 if config['contextdetail'] is not None and outdata.get('Context', None) != config['contextdetail']:
                     my_logger.info("Context ({}) does not match with the server ({})."
                           .format(outdata.get('Context', None), config['contextdetail']))
-                res = "HTTP/1.1 200 OK\r\n" \
+                res = "HTTP/1.1 204 No Content\r\n" \
                       "Connection: close\r\n" \
                       "\r\n"
                 connstreamout.send(res.encode())
