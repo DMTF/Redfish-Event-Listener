@@ -24,7 +24,7 @@ standard_out = logging.StreamHandler(sys.stdout)
 standard_out.setLevel(logging.INFO)
 my_logger.addHandler(standard_out)
 
-tool_version = '1.1.3'
+tool_version = '1.1.2'
 
 config = {
     'listenerip': '0.0.0.0',
@@ -207,7 +207,11 @@ if __name__ == '__main__':
         config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
     # Subscription Details
-    my_config_key = "SubscriptionDetails"
+    # Note: Older versions of the tool contained a spelling error for 'Subscription'; need to support both variants to maintain compatibility with older config files
+    if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
+        my_logger.error('Use either SubsciptionDetails or SubscriptionDetails in config, not both.')
+        sys.exit(1)
+    my_config_key = "SubsciptionDetails" if parsed_config.has_section("SubsciptionDetails") else "SubscriptionDetails"
     config['destination'] = parsed_config.get(my_config_key, 'Destination')
     if parsed_config.has_option(my_config_key, 'Context'):
         config['contextdetail'] = parsed_config.get(my_config_key, 'Context')
