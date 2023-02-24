@@ -27,7 +27,7 @@ The target Redfish services must also be configured to send Redfish events.
 
 ## Configuration
 
-The file `config.ini` contains a default configuration for the tool.  This can be used as a template for real configurations or edited as needed.
+The file `config.ini` contains a default configuration for the tool.  This can be used as a template for real configurations or edited as needed.  [Sample Configuration with All Options](#sample-configuration-with-all-options) shows an example with all possible configuration options.
 
 The configuration file is broken into different sections with different options.
 
@@ -49,13 +49,13 @@ The `CertificateDetails` section contains the certificate information for the sy
 
 The `SubscriptionDetails` section contains subscription information so that the Redfish service can send the desired events to the event listener.  The `Destination` option is required; other options can be omitted or have an empty value.  The following options are found in this section:
 
-* `Destination`: The URI of the event listener.  The Redfish service will perform an HTTP POST on this URI to send events to the event listener.
-* `Context`: The context string to be transmitted back by the Redfish service when sending events.
-* `Format`: The format of the event notifications the event listener will receive.  Possible values are `Event` and `MetricReport`.
-* `Expand`: `true` indicates if the `OriginOfCondition` property will contain the expanded resource in the event payload.  `false` indicates no payload expansion.
-* `ResourceTypes`: An array of resource types the Redfish service will use to filter events for the event listener.  Some examples include `Chassis`, `Manager`, and `ComputerSystem`.
-* `Registries`: An array of registry names the Redfish service will use to filter events for the event listener.  Some examples include `ResourceEvent` and `TaskEvent`.
-* `EventTypes`: An array of classes of events the event listener will receive.  This setting has been deprecated by Redfish in favor of the above settings.  Possible values are `StatusChange`, `ResourceUpdated`, `ResourceAdded`, `ResourceRemoved`, `Alert`, `MetricReport`, and `Other`.
+* `Destination`: The URI of the event listener.  The Redfish service will perform an HTTP POST on this URI to send events to the event listener.  If provided, the tool will apply the value to the `Destination` property in the `EventDestination` resource.
+* `Context`: The context string to be transmitted back by the Redfish service when sending events.  If provided, the tool will apply the value to the `Context` property in the `EventDestination` resource.
+* `Format`: The format of the event notifications the event listener will receive.  Possible values are `Event` and `MetricReport`.  If provided, the tool will apply the value to the `EventFormatType` property in the `EventDestination` resource.
+* `Expand`: `true` indicates if the `OriginOfCondition` property will contain the expanded resource in the event payload.  `false` indicates no payload expansion.  If provided, the tool will apply the value to the `IncludeOriginOfCondition` property in the `EventDestination` resource.
+* `ResourceTypes`: An array of resource types the Redfish service will use to filter events for the event listener.  Some examples include `Chassis`, `Manager`, and `ComputerSystem`.  If provided, the tool will apply the value to the `ResourceTypes` property in the `EventDestination` resource.
+* `Registries`: An array of registry names the Redfish service will use to filter events for the event listener.  Some examples include `ResourceEvent` and `TaskEvent`.  If provided, the tool will apply the value to the `RegistryPrefixes` property in the `EventDestination` resource.
+* `EventTypes`: An array of classes of events the event listener will receive.  This setting has been deprecated by Redfish in favor of the above settings.  Possible values are `StatusChange`, `ResourceUpdated`, `ResourceAdded`, `ResourceRemoved`, `Alert`, `MetricReport`, and `Other`.  If provided, the tool will apply the value to the `EventTypes` property in the `EventDestination` resource.
 
 The `ServerInformation` section contains information about the Redfish services that will transmit events to the event listener.  All options in this section, except `LoginType`, are required.  The following options are found in this section:
 
@@ -76,6 +76,46 @@ The tool can be stopped by issuing a keyboard interrupt (CTRL-C).
 
 * The subscription information remains the same for all the subscriptions initiated from the tool.
 * The event counter will restart in the event file each time the tool is restarted.
+
+## Sample Configuration with All Options
+
+The following example shows a configuration file with all possible options supported by the tool.  Many Redfish services do not support every possible option, so if a service is returning the HTTP `400 Bad Request` status code, inspect the error message to determine which options are not supported, and modify the configuration file accordingly.
+
+```
+[Information]
+Updated = February 24, 2023
+Description = Redfish Event Listener Tool Full Config
+
+[SystemInformation]
+ListenerIP = 0.0.0.0
+ListenerPort = 443
+UseSSL = on
+
+[CertificateDetails]
+certfile = cert.pem
+keyfile = server.key
+
+[SubscriptionDetails]
+Destination = https://<ListenerIP>/
+EventTypes = [
+    "Alert",
+    "ResourceRemoved",
+    "ResourceAdded" ,
+    "ResourceUpdated",
+    "StatusChange"]
+Context = Public
+Format = Event
+Expand = false
+ResourceTypes = ["Chassis"]
+Registries = ["ResourceEvent"]
+
+[ServerInformation]
+ServerIPs = ["https://<RedfishIP1>","https://<RedfishIP2>"]
+UserNames = ["Username1","Username2"]
+Passwords = ["Password1","Password2"]
+LoginType = ["Session","Basic"]
+
+```
 
 ## Release Process
 
