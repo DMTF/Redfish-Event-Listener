@@ -207,6 +207,7 @@ if __name__ == '__main__':
         config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
     # Subscription Details
+    # Note: Older versions of the tool contained a spelling error for 'Subscription'; need to support both variants to maintain compatibility with older config files
     if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
         my_logger.error('Use either SubsciptionDetails or SubscriptionDetails in config, not both.')
         sys.exit(1)
@@ -270,7 +271,7 @@ if __name__ == '__main__':
 
                 # Save the subscription info for deleting later
                 my_location = response.getheader('Location')
-                my_logger.info("Subcription is successful for {}, {}".format(dest, my_location))
+                my_logger.info("Subscription is successful for {}, {}".format(dest, my_location))
                 unsub_id = None
                 try:
                     # Response bodies are expected to have the event destination
