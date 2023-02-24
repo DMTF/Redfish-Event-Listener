@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.3] - 2023-02-24
+- Modified the listener to respond with HTTP 204 in favor of HTTP 200 since no response body is sent
+
 ## [1.1.2] - 2022-06-02
 - Corrected usage of 'lower' method for the authentication type
 
