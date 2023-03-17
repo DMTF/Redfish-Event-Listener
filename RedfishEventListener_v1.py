@@ -1,6 +1,6 @@
 # Copyright Notice:
 # Copyright 2017-2022 DMTF. All rights reserved.
-# License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/master/LICENSE.md
+# License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/main/LICENSE.md
 
 import traceback
 import logging
