@@ -46,6 +46,21 @@ config = {
     'registries': None
 }
 
+from http.server import BaseHTTPRequestHandler
+from io import BytesIO
+
+
+class HTTPRequest(BaseHTTPRequestHandler):
+    def __init__(self, request_text):
+        self.rfile = BytesIO(request_text)
+        self.raw_requestline = self.rfile.readline()
+        self.error_code = self.error_message = None
+        self.parse_request()
+
+    def send_error(self, code, message):
+        self.error_code = code
+        self.error_message = message
+
 ### Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
 def process_data(newsocketconn, fromaddr):
     if useSSL:
@@ -60,8 +75,9 @@ def process_data(newsocketconn, fromaddr):
     try:
         try:
             ### Read the json response using Socket Reader and split header and body
-            r = SocketReader(connstreamout)
-            p = HttpStream(r)
+            p = HTTPRequest(connstreamout)
+            # r = SocketReader(connstreamout)
+            # p = HttpStream(r)
             headers = p.headers()
             my_logger.info("headers: %s", headers)
 
