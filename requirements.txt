@@ -1,3 +1,2 @@
 redfish
 redfish_utilities>=1.2.0
-http_parser
