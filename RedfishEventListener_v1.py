@@ -14,8 +14,6 @@ from datetime import datetime
 import argparse
 
 import threading
-# from http_parser.http import HttpStream
-# from http_parser.reader import SocketReader
 
 from redfish import redfish_client
 import redfish_utilities
@@ -89,7 +87,7 @@ def process_data(newsocketconn, fromaddr):
         connstreamout = newsocketconn
     # Output File Name
     outputfile = "Events_" + str(fromaddr[0]) + ".txt"
-    logfile = "TimeStamhttp_data.log"
+    logfile = "TimeStamp.log"
     global event_count, data_buffer
     payload = headers = HostDetails = ""
     try:
@@ -163,7 +161,7 @@ def process_data(newsocketconn, fromaddr):
                         f.write("%s    %s    %sms\n" % (
                             sentTime.strftime("%Y-%m-%d %H:%M:%S.%f"), receTime, (receTime - sentTime).microseconds / 1000))
                     else:
-                        f.write('No available timestamhttp_data.')
+                        f.write('No available timestamp.')
 
                 try:
                     if event_count.get(str(fromaddr[0])):
