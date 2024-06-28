@@ -1,5 +1,5 @@
 # Copyright Notice:
-# Copyright 2017-2022 DMTF. All rights reserved.
+# Copyright 2017-2024 DMTF. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Event-Listener/blob/main/LICENSE.md
 
 import traceback
@@ -26,7 +26,7 @@ standard_out = logging.StreamHandler(sys.stdout)
 standard_out.setLevel(logging.INFO)
 my_logger.addHandler(standard_out)
 
-tool_version = '1.1.3'
+tool_version = '1.1.4'
 
 config = {
     'listenerip': '0.0.0.0',

@@ -1,6 +1,6 @@
 # Redfish Event Listener
 
-Copyright 2017-2022 DMTF. All rights reserved.
+Copyright 2017-2024 DMTF. All rights reserved.
 
 ## About
 

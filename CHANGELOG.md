@@ -1,5 +1,9 @@
 # Change Log
 
+## [1.1.4] - 2024-06-28
+- Updated embedded TLS certificate to no longer be expired
+- Updated tool to no longer require 'http_parser' module that is no longer maintained
+
 ## [1.1.3] - 2023-02-24
 - Modified the listener to respond with HTTP 204 in favor of HTTP 200 since no response body is sent
 
