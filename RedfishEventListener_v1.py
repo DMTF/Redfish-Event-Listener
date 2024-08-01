@@ -64,7 +64,7 @@ def read_my_socket(active_socket):
         while True:
             more_data = active_socket.recv(PACKET_SIZE)
             data = b''.join([data, more_data])
-            if more_data < PACKET_SIZE:
+            if len(more_data) < PACKET_SIZE:
                 break
 
     response_array = data.decode("utf-8").split("\r\n")
