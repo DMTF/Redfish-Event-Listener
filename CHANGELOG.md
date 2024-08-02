@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.5] - 2024-08-02
+- Fixed length check when reading data from incoming events
+
 ## [1.1.4] - 2024-06-28
 - Updated embedded TLS certificate to no longer be expired
 - Updated tool to no longer require 'http_parser' module that is no longer maintained
