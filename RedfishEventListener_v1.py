@@ -9,16 +9,11 @@ import ssl
 import sys
 import signal
 import re
-import socket
 from datetime import datetime
 import argparse
-
-import threading
-
 from redfish import redfish_client
 import redfish_utilities
-
-PACKET_SIZE = 1024
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
@@ -48,151 +43,107 @@ config = {
     'registries': None
 }
 
+event_count = {}
 
-def read_my_socket(active_socket):
-    # Read our socket data in blocks of PACKET_SIZE
-    # then return our HTTP data
-    data = b''
+class RedfishEventListenerServer(BaseHTTPRequestHandler):
+    """
+    Redfish Event Listener Server
+    Handles HTTP requests
+    """
 
-    my_logger.info('Getting data from server...')
-    data = active_socket.recv(PACKET_SIZE)
-
-    # Check if our packet fit in PACKET_SIZE bytes
-    # Ordinarily Content-Length is more valid, but this is satisfactory
-    if len(data) >= PACKET_SIZE:
-        my_logger.info("Gathering more data...")
-        while True:
-            more_data = active_socket.recv(PACKET_SIZE)
-            data = b''.join([data, more_data])
-            if len(more_data) < PACKET_SIZE:
-                break
-
-    response_array = data.decode("utf-8").split("\r\n")
-    r_type, r_headers, r_payload = response_array[0], response_array[1:-1], json.loads(response_array[-1])
-    r_method = r_type.split(' ')[0]
-    
-    headers_dict = {}
-    for item in r_headers:
-        if ': ' in item:
-            key, value = tuple(item.split(': ', 1))
-            headers_dict[key] = value
-    return r_method, headers_dict, r_payload
-
-
-# Function to read data in json format using HTTP Stream reader, parse Headers and Body data, Response status OK to service and Update the output into file
-def process_data(newsocketconn, fromaddr):
-    if useSSL:
-        connstreamout = context.wrap_socket(newsocketconn, server_side=True)
-    else:
-        connstreamout = newsocketconn
-    # Output File Name
-    outputfile = "Events_" + str(fromaddr[0]) + ".txt"
-    logfile = "TimeStamp.log"
-    global event_count, data_buffer
-    payload = headers = HostDetails = ""
-    try:
+    def do_POST(self):
+        # Check for the content length
         try:
-            # Read the json response using Socket Reader and split header and body
-            stream_output = read_my_socket(connstreamout)
-            method, headers, payload = stream_output
+            length = int(self.headers["content-length"])
+        except:
+            my_logger.error("{} - No Content-Length header".format(self.client_address[0]))
+            self.send_response(411)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
 
-            my_logger.info("response_type: {}".format(method))
-            my_logger.info("headers: {}".format(headers))
+        # Read the data
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except:
+            my_logger.error("{} - No data received or data is not JSON".format(self.client_address[0]))
+            self.send_response(400)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
 
-            if method == 'POST':
+        my_logger.info("\n")
+        my_logger.info("Event received from {}".format(self.client_address[0]))
+        my_logger.info("\n")
+
+        # Print out the events
+        if 'Events' in payload and config['verbose']:
+            event_array = payload['Events']
+            for event in event_array:
+                my_logger.info("EventType is %s", event['EventType'])
+                my_logger.info("MessageId is %s", event['MessageId'])
+                if 'EventId' in event:
+                    my_logger.info("EventId is %s", event['EventId'])
+                if 'EventGroupId' in event:
+                    my_logger.info("EventGroupId is %s", event['EventGroupId'])
+                if 'EventTimestamp' in event:
+                    my_logger.info("EventTimestamp is %s", event['EventTimestamp'])
+                if 'Severity' in event:
+                    my_logger.info("Severity is %s", event['Severity'])
+                if 'MessageSeverity' in event:
+                    my_logger.info("MessageSeverity is %s", event['MessageSeverity'])
+                if 'Message' in event:
+                    my_logger.info("Message is %s", event['Message'])
+                if 'MessageArgs' in event:
+                    my_logger.info("MessageArgs is %s", event['MessageArgs'])
+                if 'Context' in payload:
+                    my_logger.info("Context is %s", payload['Context'])
                 my_logger.info("\n")
-                my_logger.info("bodydata: %s", payload)
-                data_buffer.append(payload)
-                for eachHeader in headers.items():
-                    if eachHeader[0] == 'Host' or eachHeader[0] == 'host':
-                        HostDetails = eachHeader[1]
-
-                # Read the json response and print the output
+        if 'MetricValues' in payload and config['verbose']:
+            metric_array = payload['MetricValues']
+            my_logger.info("Metric Report Name is: %s", payload.get('Name'))
+            for metric in metric_array:
+                my_logger.info("Member ID is: %s", metric.get('MetricId'))
+                my_logger.info("Metric Value is: %s", metric.get('MetricValue'))
+                my_logger.info("TimeStamp is: %s", metric.get('Timestamp'))
+                if 'MetricProperty' in metric:
+                    my_logger.info("Metric Property is: %s", metric['MetricProperty'])
                 my_logger.info("\n")
-                my_logger.info("Server IP Address is %s", fromaddr[0])
-                my_logger.info("Server PORT number is %s", fromaddr[1])
-                my_logger.info("Listener IP is %s", HostDetails)
-                my_logger.info("\n")
-                if 'Events' in payload and config['verbose']:
-                    event_array = payload['Events']
-                    for event in event_array:
-                        my_logger.info("EventType is %s", event['EventType'])
-                        my_logger.info("MessageId is %s", event['MessageId'])
-                        if 'EventId' in event:
-                            my_logger.info("EventId is %s", event['EventId'])
-                        if 'EventGroupId' in event:
-                            my_logger.info("EventGroupId is %s", event['EventGroupId'])
-                        if 'EventTimestamp' in event:
-                            my_logger.info("EventTimestamp is %s", event['EventTimestamp'])
-                        if 'Severity' in event:
-                            my_logger.info("Severity is %s", event['Severity'])
-                        if 'MessageSeverity' in event:
-                            my_logger.info("MessageSeverity is %s", event['MessageSeverity'])
-                        if 'Message' in event:
-                            my_logger.info("Message is %s", event['Message'])
-                        if 'MessageArgs' in event:
-                            my_logger.info("MessageArgs is %s", event['MessageArgs'])
-                        if 'Context' in payload:
-                            my_logger.info("Context is %s", payload['Context'])
-                        my_logger.info("\n")
-                if 'MetricValues' in payload and config['verbose']:
-                    metric_array = payload['MetricValues']
-                    my_logger.info("Metric Report Name is: %s", payload.get('Name'))
-                    for metric in metric_array:
-                        my_logger.info("Member ID is: %s", metric.get('MetricId'))
-                        my_logger.info("Metric Value is: %s", metric.get('MetricValue'))
-                        my_logger.info("TimeStamp is: %s", metric.get('Timestamp'))
-                        if 'MetricProperty' in metric:
-                            my_logger.info("Metric Property is: %s", metric['MetricProperty'])
-                        my_logger.info("\n")
 
-                # Check the context and send the status OK if context matches
-                if config['contextdetail'] is not None and payload.get('Context', None) != config['contextdetail']:
-                    my_logger.info("Context ({}) does not match with the server ({})."
-                          .format(payload.get('Context', None), config['contextdetail']))
-                res = "HTTP/1.1 204 No Content\r\n" \
-                      "Connection: close\r\n" \
-                      "\r\n"
-                connstreamout.send(res.encode())
-                with open(logfile, 'a') as f:
-                    if 'EventTimestamp' in payload:
-                        receTime = datetime.now()
-                        sentTime = datetime.strptime(payload['EventTimestamp'], "%Y-%m-%d %H:%M:%S.%f")
-                        f.write("%s    %s    %sms\n" % (
-                            sentTime.strftime("%Y-%m-%d %H:%M:%S.%f"), receTime, (receTime - sentTime).microseconds / 1000))
-                    else:
-                        f.write('No available timestamp.')
-
+        # Update the timestamp log
+        with open("TimeStamp.log", 'a') as f:
+            if 'EventTimestamp' in payload:
                 try:
-                    if event_count.get(str(fromaddr[0])):
-                        event_count[str(fromaddr[0])] = event_count[str(fromaddr[0])] + 1
-                    else:
-                        event_count[str(fromaddr[0])] = 1
+                    receTime = datetime.now()
+                    sentTime = datetime.strptime(payload['EventTimestamp'], "%Y-%m-%d %H:%M:%S.%f")
+                    f.write("%s    %s    %sms\n" % (
+                        sentTime.strftime("%Y-%m-%d %H:%M:%S.%f"), receTime, (receTime - sentTime).microseconds / 1000))
+                except:
+                    f.write('Timestamp not in the correct format.\n')
+            else:
+                f.write('No available timestamp.\n')
 
-                    my_logger.info("Event Counter for Host %s = %s" % (str(fromaddr[0]), event_count[fromaddr[0]]))
-                    my_logger.info("\n")
-                    fd = open(outputfile, "a")
-                    fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
-                        datetime.now(), event_count[str(fromaddr[0])], str(fromaddr), json.dumps(payload)))
-                    fd.close()
-                except Exception:
-                    my_logger.info(traceback.print_exc())
+        # Log the event
+        outputfile = "Events_" + self.client_address[0] + ".txt"
+        try:
+            if event_count.get(self.client_address[0]):
+                event_count[self.client_address[0]] = event_count[self.client_address[0]] + 1
+            else:
+                event_count[self.client_address[0]] = 1
 
-            if method == 'GET':
-                # for x in data_buffer:
-                #     my_logger.info(x)
-                res = "HTTP/1.1 200 OK\n" \
-                      "Content-Type: application/json\n" \
-                      "\n" + json.dumps(data_buffer)
-                connstreamout.send(res.encode())
-                data_buffer.clear()
-
+            my_logger.info("Event Counter for Host %s = %s" % (self.client_address[0], event_count[self.client_address[0]]))
+            my_logger.info("\n")
+            fd = open(outputfile, "a")
+            fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
+                datetime.now(), event_count[self.client_address[0]], self.client_address[0], json.dumps(payload)))
+            fd.close()
         except Exception:
             my_logger.info(traceback.print_exc())
 
-    finally:
-        connstreamout.shutdown(socket.SHUT_RDWR)
-        connstreamout.close()
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
 
 if __name__ == '__main__':
     """
@@ -317,38 +268,8 @@ if __name__ == '__main__':
 
         my_logger.info("Continuing with Listener.")
 
-    # Accept the TCP connection using certificate validation using Socket wrapper
-    useSSL = config['usessl']
-    if useSSL:
-        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
-
-    # Bind socket connection and listen on the specified port
-    my_host = (config['listenerip'], config['listenerport'])
-    my_logger.info('Listening on {}:{} via {}'.format(config['listenerip'], config['listenerport'], 'HTTPS' if useSSL else 'HTTP'))
-    event_count = {}
-    data_buffer = []
-
-    my_logger.info('Press Ctrl-C to close program')
-
-    # Check if the listener is IPv4 or IPv6; defaults to IPv4 if the lookup fails
-    try:
-        family = socket.getaddrinfo(config['listenerip'], config['listenerport'])[0][0]
-    except Exception:
-        family = socket.AF_INET
-    socket_server = socket.create_server(my_host, family=family)
-    socket_server.listen(5)
-    socket_server.settimeout(3)
-
-    def handler_end(sig, frame):
-        my_logger.error('\nPress Ctrl-C again to skip unsubscribing and logging out.\n')
-        signal.signal(signal.SIGINT, lambda x, y: sys.exit(1))
-
-    def handler(sig, frame):
-        my_logger.info('Closing all our subscriptions')
-        signal.signal(signal.SIGINT, handler_end)
-        socket_server.close()
-
+    event_server = HTTPServer((config['listenerip'], config['listenerport']), RedfishEventListenerServer)
+    def clean_subscriptions():
         for name, ctx, unsub_id in target_contexts:
             my_logger.info('\nClosing {}'.format(name))
             try:
@@ -357,23 +278,24 @@ if __name__ == '__main__':
             except Exception:
                 my_logger.info('Unable to unsubscribe for events with {}'.format(ctx.get_base_url()))
                 my_logger.info(traceback.print_exc())
-
+    def sigterm_handler(signal_number, frame):
+        my_logger.info("SIGTERM: Shutting down the Redfish Event Listener")
+        event_server.server_close()
+        clean_subscriptions()
         sys.exit(0)
-    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
+    if config['usessl']:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile=config['certfile'], keyfile=config['keyfile'])
+        event_server.socket = context.wrap_socket(event_server.socket, server_side=True)
 
-    while True:
-        newsocketconn = None
-        try:
-            # Socket Binding
-            newsocketconn, fromaddr = socket_server.accept()
-            try:
-                # Multiple Threads to handle different request from different servers
-                my_logger.info('\nSocket connected::')
-                threading.Thread(target=process_data, args=(newsocketconn, fromaddr)).start()
-            except Exception:
-                my_logger.info(traceback.print_exc())
-        except socket.timeout:
-            print('.', end='', flush=True)
-        except Exception:
-            my_logger.info("Exception occurred in socket binding.")
-            my_logger.info(traceback.print_exc())
+    my_logger.info("Listening for events...")
+    my_logger.info('Press Ctrl-C to close program')
+    try:
+        event_server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    my_logger.info("Shutting down the Redfish Event Listener")
+    event_server.server_close()
+    clean_subscriptions()
+    sys.exit(0)
