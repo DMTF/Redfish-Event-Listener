@@ -72,42 +72,41 @@ class RedfishEventListenerServer(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        my_logger.info("\n")
+        my_logger.info("")
         my_logger.info("Event received from {}".format(self.client_address[0]))
-        my_logger.info("\n")
 
         # Print out the events
         if 'Events' in payload and config['verbose']:
             event_array = payload['Events']
             for event in event_array:
-                my_logger.info("EventType is %s", event['EventType'])
-                my_logger.info("MessageId is %s", event['MessageId'])
+                my_logger.info("  EventType: %s", event.get('EventType'))
+                my_logger.info("  MessageId: %s", event.get('MessageId'))
                 if 'EventId' in event:
-                    my_logger.info("EventId is %s", event['EventId'])
+                    my_logger.info("  EventId: %s", event['EventId'])
                 if 'EventGroupId' in event:
-                    my_logger.info("EventGroupId is %s", event['EventGroupId'])
+                    my_logger.info("  EventGroupId: %s", event['EventGroupId'])
                 if 'EventTimestamp' in event:
-                    my_logger.info("EventTimestamp is %s", event['EventTimestamp'])
+                    my_logger.info("  EventTimestamp: %s", event['EventTimestamp'])
                 if 'Severity' in event:
-                    my_logger.info("Severity is %s", event['Severity'])
+                    my_logger.info("  Severity: %s", event['Severity'])
                 if 'MessageSeverity' in event:
-                    my_logger.info("MessageSeverity is %s", event['MessageSeverity'])
+                    my_logger.info("  MessageSeverity: %s", event['MessageSeverity'])
                 if 'Message' in event:
-                    my_logger.info("Message is %s", event['Message'])
+                    my_logger.info("  Message: %s", event['Message'])
                 if 'MessageArgs' in event:
-                    my_logger.info("MessageArgs is %s", event['MessageArgs'])
+                    my_logger.info("  MessageArgs: %s", event['MessageArgs'])
                 if 'Context' in payload:
-                    my_logger.info("Context is %s", payload['Context'])
-                my_logger.info("\n")
+                    my_logger.info("  Context: %s", payload['Context'])
+                my_logger.info("")
         if 'MetricValues' in payload and config['verbose']:
             metric_array = payload['MetricValues']
-            my_logger.info("Metric Report Name is: %s", payload.get('Name'))
+            my_logger.info("  Metric Report Name: %s", payload.get('Name'))
             for metric in metric_array:
-                my_logger.info("Member ID is: %s", metric.get('MetricId'))
-                my_logger.info("Metric Value is: %s", metric.get('MetricValue'))
-                my_logger.info("TimeStamp is: %s", metric.get('Timestamp'))
+                my_logger.info("  MetricId: %s", metric.get('MetricId'))
+                my_logger.info("  MetricValue: %s", metric.get('MetricValue'))
+                my_logger.info("  Timestamp: %s", metric.get('Timestamp'))
                 if 'MetricProperty' in metric:
-                    my_logger.info("Metric Property is: %s", metric['MetricProperty'])
+                    my_logger.info("  MetricProperty is: %s", metric['MetricProperty'])
                 my_logger.info("\n")
 
         # Update the timestamp log
@@ -132,7 +131,7 @@ class RedfishEventListenerServer(BaseHTTPRequestHandler):
                 event_count[self.client_address[0]] = 1
 
             my_logger.info("Event Counter for Host %s = %s" % (self.client_address[0], event_count[self.client_address[0]]))
-            my_logger.info("\n")
+            my_logger.info("")
             fd = open(outputfile, "a")
             fd.write("Time:%s Count:%s\nHost IP:%s\nEvent Details:%s\n" % (
                 datetime.now(), event_count[self.client_address[0]], self.client_address[0], json.dumps(payload)))
