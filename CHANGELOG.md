@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.6] - 2024-10-25
+- Migrated to Python's HTTP server to avoid manual socket handling
+
 ## [1.1.5] - 2024-08-02
 - Fixed length check when reading data from incoming events
 
