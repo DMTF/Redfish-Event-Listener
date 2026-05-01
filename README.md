@@ -56,6 +56,11 @@ The `SubscriptionDetails` section contains subscription information so that the 
 * `Registries`: An array of registry names the Redfish service will use to filter events for the event listener.  Some examples include `ResourceEvent` and `TaskEvent`.  If provided, the tool will apply the value to the `RegistryPrefixes` property in the `EventDestination` resource.
 * `EventTypes`: An array of classes of events the event listener will receive.  This setting has been deprecated by Redfish in favor of the above settings.  Possible values are `StatusChange`, `ResourceUpdated`, `ResourceAdded`, `ResourceRemoved`, `Alert`, `MetricReport`, and `Other`.  If provided, the tool will apply the value to the `EventTypes` property in the `EventDestination` resource.
 
+The `ListenerAuthentication` section contains authentication details to allow a Redfish service to perform an HTTP POST to the destination URI of the event listener.  The following options are found in this section:
+
+* `UserName`: The username the Redfish service will provide in the HTTP POST request.
+* `Password`: The password the Redfish service will provide in the HTTP POST request.
+
 The `ServerInformation` section contains information about the Redfish services that will transmit events to the event listener.  All options in this section, except `LoginType`, are required.  The following options are found in this section:
 
 * `ServerIPs`: An array of URIs of the Redfish services for subscribing.
