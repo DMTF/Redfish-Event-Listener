@@ -54,6 +54,8 @@ class RedfishEventListenerServer(BaseHTTPRequestHandler):
     Handles HTTP requests
     """
 
+    protocol_version = "HTTP/1.1"
+
     def do_POST(self):
         # Check if Authorization header exists
         auth_header = self.headers.get("Authorization")
