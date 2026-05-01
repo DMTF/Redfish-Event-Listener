@@ -51,6 +51,8 @@ class RedfishEventListenerServer(BaseHTTPRequestHandler):
     Handles HTTP requests
     """
 
+    protocol_version = "HTTP/1.1"
+
     def do_POST(self):
         # Check for the content length
         try:
