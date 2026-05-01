@@ -1,2 +1,2 @@
 redfish
-redfish_utilities>=1.2.0
+redfish_utilities>=3.4.8

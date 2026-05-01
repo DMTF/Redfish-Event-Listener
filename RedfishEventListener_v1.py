@@ -14,6 +14,7 @@ import argparse
 from redfish import redfish_client
 import redfish_utilities
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import base64
 
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
@@ -40,7 +41,9 @@ config = {
     'format': None,
     'expand': None,
     'resourcetypes': None,
-    'registries': None
+    'registries': None,
+    'listener_username': None,
+    'listener_password': None
 }
 
 event_count = {}
@@ -52,6 +55,31 @@ class RedfishEventListenerServer(BaseHTTPRequestHandler):
     """
 
     def do_POST(self):
+        # Check if Authorization header exists
+        auth_header = self.headers.get("Authorization")
+
+        # Only validate credentials if Authorization header is present
+        if auth_header:
+            if not auth_header.startswith("Basic "):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", "Basic realm=\"Redfish Listener\"")
+                self.end_headers()
+                self.wfile.write(b"Unauthorized: Invalid Authorization header format")
+                return
+
+            # Decode Basic Auth
+            encoded_credentials = auth_header.split(" ", 1)[1]
+            decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+            username, password = decoded_credentials.split(":", 1)
+
+            # Validate credentials
+            if username != config['listener_username'] or password != config['listener_password']:
+                self.send_response(403)
+                self.end_headers()
+                self.wfile.write(b"Forbidden: Invalid credentials")
+                logging.info("Invalid Credentials")
+                return
+
         # Check for the content length
         try:
             length = int(self.headers["content-length"])
@@ -183,6 +211,11 @@ if __name__ == '__main__':
         config['certfile'] = parsed_config.get('CertificateDetails', 'certfile')
         config['keyfile'] = parsed_config.get('CertificateDetails', 'keyfile')
 
+    # Listener Authentication
+    if parsed_config.has_section('ListenerAuthentication'):
+        config['listener_username'] = parsed_config.get('ListenerAuthentication', 'UserName')
+        config['listener_password'] = parsed_config.get('ListenerAuthentication', 'Password')
+
     # Subscription Details
     # Note: Older versions of the tool contained a spelling error for 'Subscription'; need to support both variants to maintain compatibility with older config files
     if parsed_config.has_section("SubsciptionDetails") and parsed_config.has_section("SubscriptionDetails"):
@@ -228,6 +261,13 @@ if __name__ == '__main__':
     elif len(config['serverIPs']) == 0:
         my_logger.info("No subscriptions are specified. Continuing with Listener.")
     else:
+        # Prepare HTTP headers for subscription if listener authentication is configured
+        http_headers = None
+        if config['listener_username'] and config['listener_password']:
+            auth_string = f"{config['listener_username']}:{config['listener_password']}"
+            auth_b64 = base64.b64encode(auth_string.encode()).decode()
+            http_headers = [{"Authorization": f"Basic {auth_b64}"}]
+
         # Create the subscriptions on the Redfish services provided
         for dest, user, passwd, logintype in zip(config['serverIPs'], config['usernames'], config['passwords'], config['logintype']):
             try:
@@ -244,7 +284,8 @@ if __name__ == '__main__':
                                                                        format=config['format'],
                                                                        expand=config['expand'],
                                                                        resource_types=config['resourcetypes'],
-                                                                       registries=config['registries'])
+                                                                       registries=config['registries'],
+                                                                       http_headers=http_headers)
 
                 # Save the subscription info for deleting later
                 my_location = response.getheader('Location')
