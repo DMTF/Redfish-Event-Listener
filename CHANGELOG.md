@@ -1,5 +1,9 @@
 # Change Log
 
+## [1.1.7] - 2026-05-01
+- Added optional HTTP Basic Authentication support
+- Modified the web server to use HTTP/1.1 as the protocol version
+
 ## [1.1.6] - 2024-10-25
 - Migrated to Python's HTTP server to avoid manual socket handling
 
