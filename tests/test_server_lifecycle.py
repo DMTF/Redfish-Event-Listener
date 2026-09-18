@@ -1,6 +1,7 @@
 import sys
 import signal
 import ssl
+import socket
 import pytest
 from unittest.mock import patch, MagicMock, call
 from http.server import HTTPServer
@@ -9,6 +10,18 @@ import RedfishEventListener_v1 as rel
 
 class TestServerLifecycle:
     """Server setup and signal handling tests."""
+
+    def test_ipv4_listener_uses_ipv4_server(self):
+        """An IPv4 listener address selects the default IPv4 server."""
+        server_class = rel.get_listener_server_class("0.0.0.0")
+        assert server_class is HTTPServer
+        assert server_class.address_family == socket.AF_INET
+
+    def test_ipv6_listener_uses_ipv6_server(self):
+        """An IPv6 listener address selects an AF_INET6 server."""
+        server_class = rel.get_listener_server_class("::1")
+        assert server_class is rel.IPv6HTTPServer
+        assert server_class.address_family == socket.AF_INET6
 
     def test_clean_subscriptions(self):
         """Mock contexts, call clean_subscriptions -> all unsubscribed + logged out."""

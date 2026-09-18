@@ -6,9 +6,11 @@ import traceback
 import logging
 import json
 import ssl
+import socket
 import sys
 import signal
 import re
+import ipaddress
 from datetime import datetime
 import argparse
 from redfish import redfish_client
@@ -48,6 +50,22 @@ config = {
 }
 
 event_count = {}
+
+
+class IPv6HTTPServer(HTTPServer):
+    """HTTP server configured to bind IPv6 listener addresses."""
+
+    address_family = socket.AF_INET6
+
+
+def get_listener_server_class(listener_ip):
+    """Return the HTTP server class appropriate for a listener IP address."""
+    try:
+        if ipaddress.ip_address(listener_ip).version == 6:
+            return IPv6HTTPServer
+    except ValueError:
+        pass
+    return HTTPServer
 
 
 def parse_list(string: str):
@@ -391,7 +409,8 @@ if __name__ == '__main__':
 
         my_logger.info("Continuing with Listener.")
 
-    event_server = HTTPServer((config['listenerip'], config['listenerport']), RedfishEventListenerServer)
+    server_class = get_listener_server_class(config['listenerip'])
+    event_server = server_class((config['listenerip'], config['listenerport']), RedfishEventListenerServer)
     def clean_subscriptions():
         for name, ctx, unsub_id in target_contexts:
             my_logger.info('\nClosing {}'.format(name))
