@@ -1,5 +1,8 @@
 # Change Log
 
+## [1.1.9] - 2026-09-18
+- Fixed IPv6 support
+
 ## [1.1.8] - 2026-06-12
 - Added HTTP/1.1 chunked transfer encoding support
 
